@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NEXUS Dylib Builder</title>
+    <style>
+        body {
+            background: linear-gradient(135deg, #1a1a2e, #16213e);
+            font-family: 'Courier New', monospace;
+            color: #0f0;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: rgba(0,0,0,0.8);
+            border-radius: 20px;
+            padding: 30px;
+            border: 1px solid #0f0;
+            box-shadow: 0 0 20px rgba(0,255,0,0.2);
+        }
+        h1 {
+            text-align: center;
+            color: #0f0;
+            text-shadow: 0 0 10px #0f0;
+        }
+        textarea {
+            width: 100%;
+            height: 400px;
+            background: #0a0a1a;
+            color: #0f0;
+            border: 1px solid #0f0;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            padding: 10px;
+            border-radius: 10px;
+        }
+        button {
+            background: #0f0;
+            color: #000;
+            border: none;
+            padding: 15px 30px;
+            font-size: 18px;
+            font-weight: bold;
+            border-radius: 10px;
+            cursor: pointer;
+            margin-top: 20px;
+            width: 100%;
+        }
+        button:hover {
+            background: #0a0;
+            box-shadow: 0 0 15px #0f0;
+        }
+        .status {
+            margin-top: 20px;
+            padding: 15px;
+            background: #0a0a1a;
+            border-radius: 10px;
+            border-left: 4px solid #0f0;
+        }
+        .link {
+            margin-top: 15px;
+            padding: 10px;
+            background: #0a0a1a;
+            border-radius: 10px;
+            word-break: break-all;
+        }
+        a {
+            color: #0f0;
+        }
+        .footer {
+            text-align: center;
+            margin-top: 30px;
+            font-size: 12px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>⚡ NEXUS DYLIB BUILDER ⚡</h1>
+    <p style="text-align:center">Colle ton code Tweak.x ci-dessous → Génère automatiquement le .dylib</p>
+
+    <textarea id="tweakCode" placeholder='#import <UIKit/UIKit.h>
+
+%hook AppDelegate
+
+- (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
+    NSLog(@"✅ Dylib chargé");
+    return %orig;
+}
+
+%end'></textarea>
+
+    <button id="generateBtn">🚀 GÉNÉRER LE DYLIB</button>
+
+    <div id="status" class="status">📡 Statut : En attente...</div>
+    <div id="link" class="link" style="display:none"></div>
+</div>
+<div class="footer">
+    🔥 NEXUS MOD - Usine à dylibs 🔥
+</div>
+
+<script>
+    const GITHUB_TOKEN = ''; // À remplacer par ton token GitHub
+    const REPO_OWNER = 'devaximods';
+    const REPO_NAME = 'ESPBox';
+    const BRANCH = 'main';
+
+    async function updateFile(path, content, commitMessage) {
+        const url = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${path}`;
+        
+        // D'abord, récupérer le SHA du fichier existant
+        let sha = '';
+        try {
+            const getRes = await fetch(url);
+            if (getRes.ok) {
+                const data = await getRes.json();
+                sha = data.sha;
+            }
+        } catch(e) {}
+        
+        const body = {
+            message: commitMessage,
+            content: btoa(unescape(encodeURIComponent(content))),
+            branch: BRANCH
+        };
+        if (sha) body.sha = sha;
+        
+        const res = await fetch(url, {
+            method: 'PUT',
+            headers: {
+                'Authorization': `token ${GITHUB_TOKEN}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(body)
+        });
+        
+        if (!res.ok) throw new Error(`Erreur ${path}: ${res.status}`);
+        return await res.json();
+    }
+
+    async function triggerWorkflow() {
+        const url = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/actions/workflows/build.yml/dispatches`;
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Authorization': `token ${GITHUB_TOKEN}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                ref: BRANCH
+            })
+        });
+        if (!res.ok) throw new Error(`Erreur workflow: ${res.status}`);
+    }
+
+    async function getLatestArtifact() {
+        const url = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/actions/artifacts`;
+        const res = await fetch(url, {
+            headers: { 'Authorization': `token ${GITHUB_TOKEN}` }
+        });
+        const data = await res.json();
+        if (data.artifacts && data.artifacts.length > 0) {
+            return data.artifacts[0].archive_download_url;
+        }
+        return null;
+    }
+
+    // Templates générés automatiquement
+    function getMakefile() {
+        return `export TARGET = iphone:latest:15.0
+export ARCHS = arm64
+
+include $(THEOS)/makefiles/common.mk
+
+TWEAK_NAME = NexusMod
+NexusMod_FILES = Tweak.x
+NexusMod_FRAMEWORKS = UIKit StoreKit
+
+include $(THEOS)/makefiles/tweak.mk`;
+    }
+
+    function getControl() {
+        return `Package: com.nexus.mod
+Name: NexusMod
+Version: 1.0
+Architecture: iphoneos-arm64
+Description: Nexus Mod Menu
+Maintainer: nexus
+Author: nexus
+Section: Tweaks`;
+    }
+
+    function getPlist() {
+        return `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Filter</key>
+    <dict>
+        <key>Bundles</key>
+        <array>
+            <string>com.apple.UIKit</string>
+        </array>
+    </dict>
+</dict>
+</plist>`;
+    }
+
+    document.getElementById('generateBtn').onclick = async () => {
+        const tweakCode = document.getElementById('tweakCode').value;
+        if (!tweakCode.trim()) {
+            alert('Colle ton code Tweak.x !');
+            return;
+        }
+
+        document.getElementById('status').innerHTML = '📡 Statut : Envoi des fichiers à GitHub...';
+        
+        try {
+            // 1. Mettre à jour Tweak.x
+            await updateFile('Tweak.x', tweakCode, 'Update Tweak.x');
+            document.getElementById('status').innerHTML = '📡 Statut : Tweak.x mis à jour ✓';
+            
+            // 2. Mettre à jour Makefile
+            await updateFile('Makefile', getMakefile(), 'Update Makefile');
+            document.getElementById('status').innerHTML = '📡 Statut : Makefile mis à jour ✓';
+            
+            // 3. Mettre à jour control
+            await updateFile('control', getControl(), 'Update control');
+            document.getElementById('status').innerHTML = '📡 Statut : control mis à jour ✓';
+            
+            // 4. Mettre à jour NexusMod.plist
+            await updateFile('NexusMod.plist', getPlist(), 'Update plist');
+            document.getElementById('status').innerHTML = '📡 Statut : plist mis à jour ✓';
+            
+            // 5. Déclencher le workflow
+            await triggerWorkflow();
+            document.getElementById('status').innerHTML = '📡 Statut : Compilation lancée (2-3 minutes)...';
+            
+            // 6. Attendre et récupérer le lien
+            let attempts = 0;
+            let artifactUrl = null;
+            while (attempts < 30 && !artifactUrl) {
+                await new Promise(r => setTimeout(r, 10000));
+                artifactUrl = await getLatestArtifact();
+                attempts++;
+                document.getElementById('status').innerHTML = `📡 Statut : Compilation en cours... (${attempts * 10}s)`;
+            }
+            
+            if (artifactUrl) {
+                document.getElementById('status').innerHTML = '✅ Statut : Compilation terminée !';
+                document.getElementById('link').style.display = 'block';
+                document.getElementById('link').innerHTML = `<a href="${artifactUrl}" target="_blank">📦 Télécharger le .dylib (clique ici)</a>`;
+            } else {
+                document.getElementById('status').innerHTML = '⚠️ Statut : Compilation trop longue. Va sur GitHub Actions pour voir.';
+            }
+            
+        } catch (error) {
+            document.getElementById('status').innerHTML = `❌ Erreur : ${error.message}`;
+        }
+    };
+</script>
+</body>
+</html>
