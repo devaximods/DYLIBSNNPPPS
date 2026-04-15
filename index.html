@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NEXUS - Offsets Extractor</title>
+    <title>NEXUS - Offsets Extractor (Full File Scan)</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { background: #000000; font-family: 'Courier New', monospace; min-height: 100vh; padding: 20px; }
@@ -30,7 +30,7 @@
 <div class="container">
     <div class="header">
         <h1>NEXUS OFFSETS EXTRACTOR</h1>
-        <p>Scans ALL lines of your dump.cs - no limit, no stop until complete</p>
+        <p>Scans ALL lines - uses FileReader API with proper chunk handling</p>
     </div>
     
     <div class="grid">
@@ -38,9 +38,9 @@
             <h3>DUMP.CS FILE</h3>
             <div class="file-zone" onclick="document.getElementById('dumpFile').click()">
                 <p>📁 CLICK TO SELECT DUMP.CS FILE</p>
-                <p style="color:#444; font-size:12px;">Any file size - scans until the end</p>
+                <p style="color:#444; font-size:12px;">Any file size - reads completely</p>
             </div>
-            <input type="file" id="dumpFile" accept=".cs,.txt" style="display:none;" onchange="startFullScan()">
+            <input type="file" id="dumpFile" accept=".cs,.txt" style="display:none;" onchange="fullFileScan()">
             
             <div class="progress-container" style="margin-top:15px;">
                 <div class="progress-bar" id="progressBar"></div>
@@ -49,11 +49,9 @@
             
             <div style="margin-top:10px;">
                 <span id="scanStatus" style="color:#ff0;">● IDLE</span>
-                <span id="linesProcessed" style="color:#666; margin-left:10px;">0 lines</span>
+                <span id="bytesRead" style="color:#666; margin-left:10px;">0 MB</span>
                 <span id="foundCount" style="color:#0f0; margin-left:10px;">0/8 found</span>
             </div>
-            
-            <button id="cancelBtn" onclick="cancelFullScan()" style="display:none; background:#330000;">STOP SCAN</button>
         </div>
         
         <div class="panel">
@@ -67,11 +65,21 @@
 </div>
 
 <script>
-let fullScanActive = false;
-let fullScanCancelled = false;
-let currentOffsets = {};
+let currentOffsets = {
+    'OFFSET_GET_LOCAL_PLAYER': null,
+    'OFFSET_GET_PLAYERS_LIST': null,
+    'OFFSET_GET_TEAM': null,
+    'OFFSET_GET_POSITION': null,
+    'OFFSET_GET_ROTATION': null,
+    'OFFSET_SET_ROTATION': null,
+    'OFFSET_CAMERA_GET_MAIN': null,
+    'OFFSET_WORLD_TO_SCREEN': null
+};
 
-const searchPatterns = [
+let scanActive = false;
+let scanCancelled = false;
+
+const patterns = [
     { name: 'OFFSET_GET_LOCAL_PLAYER', regex: /(?:get_LocalPlayer|LocalPlayer)[^\n]{0,200}0x([0-9A-Fa-f]{8,16})/i },
     { name: 'OFFSET_GET_PLAYERS_LIST', regex: /(?:get_Players|get_AllPlayers)[^\n]{0,200}0x([0-9A-Fa-f]{8,16})/i },
     { name: 'OFFSET_GET_TEAM', regex: /(?:get_teamNumber|get_Team|TeamID)[^\n]{0,200}0x([0-9A-Fa-f]{8,16})/i },
@@ -82,167 +90,140 @@ const searchPatterns = [
     { name: 'OFFSET_WORLD_TO_SCREEN', regex: /(?:WorldToScreenPoint|WorldToScreen)[^\n]{0,200}0x([0-9A-Fa-f]{8,16})/i }
 ];
 
-function startFullScan() {
+function fullFileScan() {
     const file = document.getElementById('dumpFile').files[0];
     if (!file) return;
     
     // Reset
-    for (const p of searchPatterns) {
-        currentOffsets[p.name] = null;
-    }
-    
-    fullScanActive = true;
-    fullScanCancelled = false;
+    for (let key in currentOffsets) currentOffsets[key] = null;
+    scanActive = true;
+    scanCancelled = false;
     
     document.getElementById('offsetsOutput').value = '';
     document.getElementById('progressBar').style.width = '0%';
     document.getElementById('progressText').innerHTML = '0%';
-    document.getElementById('cancelBtn').style.display = 'inline-block';
     document.getElementById('scanStatus').innerHTML = '● SCANNING';
     document.getElementById('scanStatus').style.color = '#0f0';
-    document.getElementById('linesProcessed').innerHTML = '0 lines';
+    document.getElementById('bytesRead').innerHTML = '0 MB';
     document.getElementById('foundCount').innerHTML = '0/8 found';
-    document.getElementById('status').innerHTML = `[STATUS] Scanning ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB) - This will scan ALL lines until complete.`;
+    document.getElementById('status').innerHTML = `[STATUS] Loading entire file into memory... This may take a moment for large files.`;
     
-    const chunkSize = 1024 * 512; // 512KB chunks for smoother progress
-    let offset = 0;
-    let leftover = '';
-    let totalLines = 0;
-    let lastProgressUpdate = Date.now();
+    // Read entire file at once (simpler and more reliable)
+    const reader = new FileReader();
     
-    function readNextChunk() {
-        if (fullScanCancelled) {
+    reader.onload = function(e) {
+        if (scanCancelled) {
             finishScan(true);
             return;
         }
         
-        const chunk = file.slice(offset, offset + chunkSize);
-        const reader = new FileReader();
+        const content = e.target.result;
+        const sizeMB = (content.length / 1024 / 1024).toFixed(2);
+        document.getElementById('status').innerHTML = `[STATUS] File loaded (${sizeMB} MB). Scanning lines...`;
         
-        reader.onload = function(e) {
-            const text = leftover + e.target.result;
-            const lines = text.split('\n');
-            leftover = lines.pop();
+        // Split into lines
+        const lines = content.split(/\r?\n/);
+        const totalLines = lines.length;
+        document.getElementById('bytesRead').innerHTML = `${sizeMB} MB`;
+        
+        // Scan lines with progress update
+        let processed = 0;
+        const batchSize = 10000; // Process 10k lines at a time to keep UI responsive
+        
+        function processBatch() {
+            if (scanCancelled) {
+                finishScan(true);
+                return;
+            }
             
-            // Process each line
-            for (const line of lines) {
-                // Search for all patterns in this line
-                for (const pattern of searchPatterns) {
+            const end = Math.min(processed + batchSize, totalLines);
+            
+            for (let i = processed; i < end; i++) {
+                const line = lines[i];
+                for (const pattern of patterns) {
                     if (currentOffsets[pattern.name] === null) {
                         const match = line.match(pattern.regex);
                         if (match) {
                             currentOffsets[pattern.name] = `0x${match[1]}`;
-                            updateDisplay();
+                            updateOutputDisplay();
                         }
                     }
                 }
-                totalLines++;
             }
             
-            offset += chunkSize;
-            const percent = Math.min(100, (offset / file.size) * 100);
+            processed = end;
+            const percent = (processed / totalLines) * 100;
             document.getElementById('progressBar').style.width = `${percent}%`;
             document.getElementById('progressText').innerHTML = `${Math.round(percent)}%`;
+            document.getElementById('bytesRead').innerHTML = `${sizeMB} MB (${(processed/1000).toFixed(0)}k lines)`;
             
-            // Update lines counter every 500ms
-            if (Date.now() - lastProgressUpdate > 500) {
-                document.getElementById('linesProcessed').innerHTML = `${(totalLines / 1000).toFixed(1)}k lines`;
-                lastProgressUpdate = Date.now();
-                
-                const found = Object.values(currentOffsets).filter(v => v !== null).length;
-                document.getElementById('foundCount').innerHTML = `${found}/8 found`;
-                document.getElementById('status').innerHTML = `[STATUS] Scanning... ${Math.round(percent)}% | ${(totalLines / 1000).toFixed(1)}k lines | ${found}/8 offsets found`;
-            }
+            const found = Object.values(currentOffsets).filter(v => v !== null).length;
+            document.getElementById('foundCount').innerHTML = `${found}/8 found`;
+            document.getElementById('status').innerHTML = `[STATUS] Scanning... ${Math.round(percent)}% | ${(processed/1000).toFixed(0)}k/${(totalLines/1000).toFixed(0)}k lines | ${found}/8 found`;
             
-            if (offset < file.size) {
-                // Continue with next chunk
-                setTimeout(readNextChunk, 1);
+            if (processed < totalLines) {
+                // Schedule next batch
+                setTimeout(processBatch, 10);
             } else {
-                // Process leftover line
-                if (leftover.trim()) {
-                    for (const pattern of searchPatterns) {
-                        if (currentOffsets[pattern.name] === null) {
-                            const match = leftover.match(pattern.regex);
-                            if (match) {
-                                currentOffsets[pattern.name] = `0x${match[1]}`;
-                                updateDisplay();
-                            }
-                        }
-                    }
-                }
                 finishScan(false);
             }
-        };
+        }
         
-        reader.onerror = function() {
-            document.getElementById('status').innerHTML = '[ERROR] Failed to read file';
-            finishScan(true);
-        };
-        
-        reader.readAsText(chunk);
-    }
+        processBatch();
+    };
     
-    function updateDisplay() {
+    reader.onerror = function() {
+        document.getElementById('status').innerHTML = '[ERROR] Failed to read file. File may be too large for browser memory.';
+        finishScan(true);
+    };
+    
+    reader.readAsText(file);
+}
+
+function updateOutputDisplay() {
+    let output = '// ============ EXTRACTED OFFSETS ============\n\n';
+    for (const [name, offset] of Object.entries(currentOffsets)) {
+        if (offset !== null) {
+            output += `#define ${name}    ${offset}\n`;
+        } else {
+            output += `#define ${name}    0x00000000\n`;
+        }
+    }
+    document.getElementById('offsetsOutput').value = output;
+}
+
+function finishScan(cancelled) {
+    scanActive = false;
+    const found = Object.values(currentOffsets).filter(v => v !== null).length;
+    
+    if (cancelled) {
+        document.getElementById('scanStatus').innerHTML = '● CANCELLED';
+        document.getElementById('scanStatus').style.color = '#ff0';
+        document.getElementById('status').innerHTML = '[CANCELLED] Scan stopped by user.';
+    } else {
+        document.getElementById('scanStatus').innerHTML = '● COMPLETE';
+        document.getElementById('scanStatus').style.color = '#0f0';
+        document.getElementById('progressBar').style.width = '100%';
+        document.getElementById('progressText').innerHTML = '100%';
+        
         let output = '// ============ EXTRACTED OFFSETS ============\n\n';
-        let found = 0;
         for (const [name, offset] of Object.entries(currentOffsets)) {
             if (offset !== null) {
-                found++;
                 output += `#define ${name}    ${offset}\n`;
             } else {
                 output += `#define ${name}    0x00000000\n`;
             }
         }
-        output += `\n// ${found}/8 offsets found so far\n`;
         document.getElementById('offsetsOutput').value = output;
-    }
-    
-    function finishScan(cancelled) {
-        fullScanActive = false;
-        document.getElementById('cancelBtn').style.display = 'none';
         
-        const found = Object.values(currentOffsets).filter(v => v !== null).length;
-        
-        if (cancelled) {
-            document.getElementById('scanStatus').innerHTML = '● CANCELLED';
-            document.getElementById('scanStatus').style.color = '#ff0';
-            document.getElementById('status').innerHTML = '[CANCELLED] Scan stopped by user.';
+        if (found === 0) {
+            document.getElementById('status').innerHTML = '[WARNING] No offsets found. The dump format may be different.';
         } else {
-            document.getElementById('scanStatus').innerHTML = '● COMPLETE';
-            document.getElementById('scanStatus').style.color = '#0f0';
-            document.getElementById('progressBar').style.width = '100%';
-            document.getElementById('progressText').innerHTML = '100%';
-            
-            let output = '// ============ EXTRACTED OFFSETS ============\n\n';
-            for (const [name, offset] of Object.entries(currentOffsets)) {
-                if (offset !== null) {
-                    output += `#define ${name}    ${offset}\n`;
-                } else {
-                    output += `#define ${name}    0x00000000\n`;
-                }
-            }
-            output += `\n// ${found}/8 offsets found - Scan complete\n`;
-            document.getElementById('offsetsOutput').value = output;
-            
-            if (found === 0) {
-                document.getElementById('status').innerHTML = '[WARNING] No offsets found. The dump may be obfuscated.';
-            } else {
-                document.getElementById('status').innerHTML = `[COMPLETE] ${found}/8 offsets found after scanning ${(totalLines / 1000).toFixed(0)}k lines.`;
-            }
+            document.getElementById('status').innerHTML = `[COMPLETE] ${found}/8 offsets found.`;
         }
-        
-        document.getElementById('foundCount').innerHTML = `${found}/8 found`;
     }
     
-    readNextChunk();
-}
-
-function cancelFullScan() {
-    if (fullScanActive) {
-        fullScanCancelled = true;
-        document.getElementById('scanStatus').innerHTML = '● CANCELLING...';
-        document.getElementById('status').innerHTML = '[STATUS] Cancelling scan...';
-    }
+    document.getElementById('foundCount').innerHTML = `${found}/8 found`;
 }
 
 function copyOffsets() {
