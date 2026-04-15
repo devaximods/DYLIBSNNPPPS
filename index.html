@@ -3,71 +3,217 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NEXUS - Debug Dump Viewer</title>
+    <title>NEXUS - Offsets Extractor (Obfuscated Dump)</title>
     <style>
-        body { background: #000; color: #0f0; font-family: monospace; padding: 20px; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: #000000; font-family: 'Courier New', monospace; min-height: 100vh; padding: 20px; }
         .container { max-width: 1200px; margin: 0 auto; }
-        textarea { width: 100%; background: #000; color: #0f0; border: 1px solid #0f0; padding: 10px; font-family: monospace; }
-        button { background: #0f0; color: #000; padding: 10px 20px; cursor: pointer; margin-top: 10px; }
-        .preview { background: #0a0a0a; border: 1px solid #333; padding: 15px; margin-top: 15px; overflow-x: auto; white-space: pre-wrap; font-family: monospace; font-size: 11px; max-height: 300px; }
+        .header { text-align: center; margin-bottom: 30px; padding-bottom: 20px; border-bottom: 1px solid #333; }
+        .header h1 { color: #fff; font-size: 1.8em; font-weight: normal; letter-spacing: 2px; }
+        .header p { color: #666; margin-top: 10px; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        @media (max-width: 768px) { .grid { grid-template-columns: 1fr; } }
+        .panel { background: #0a0a0a; border: 1px solid #333; padding: 20px; }
+        .panel h3 { color: #fff; margin-bottom: 15px; font-weight: normal; }
+        textarea { width: 100%; background: #000; color: #0f0; border: 1px solid #333; font-family: monospace; font-size: 12px; padding: 12px; resize: vertical; }
+        button { background: #111; color: #fff; border: 1px solid #333; padding: 12px 24px; cursor: pointer; font-family: monospace; margin-top: 10px; }
+        button:hover { background: #222; border-color: #fff; }
+        .status { margin-top: 15px; padding: 12px; background: #0a0a0a; border-left: 2px solid #fff; color: #ccc; font-size: 12px; max-height: 150px; overflow-y: auto; }
+        .file-zone { border: 1px dashed #333; padding: 30px; text-align: center; margin-bottom: 15px; cursor: pointer; transition: all 0.2s; }
+        .file-zone:hover { border-color: #0f0; background: #0a0a0a; }
+        .progress-container { width: 100%; background: #1a1a1a; margin-top: 10px; position: relative; }
+        .progress-bar { width: 0%; height: 20px; background: #0f0; transition: width 0.3s; }
+        .progress-text { position: absolute; top: 2px; left: 10px; color: #000; font-size: 11px; font-weight: bold; }
     </style>
 </head>
 <body>
 <div class="container">
-    <h1>NEXUS - DUMP DEBUGGER</h1>
-    <p>Upload your dump.cs to see its format and find the correct patterns</p>
+    <div class="header">
+        <h1>NEXUS OFFSETS EXTRACTOR</h1>
+        <p>Extracts offsets from obfuscated dumps (searches for RVA/Offset patterns)</p>
+    </div>
     
-    <input type="file" id="dumpFile" accept=".cs,.txt">
-    <button onclick="analyzeDump()">ANALYZE DUMP FORMAT</button>
+    <div class="grid">
+        <div class="panel">
+            <h3>DUMP.CS FILE</h3>
+            <div class="file-zone" onclick="document.getElementById('dumpFile').click()">
+                <p>📁 CLICK TO SELECT DUMP.CS FILE</p>
+                <p style="color:#444; font-size:12px;">Works with obfuscated dumps</p>
+            </div>
+            <input type="file" id="dumpFile" accept=".cs,.txt" style="display:none;" onchange="extractObfuscatedOffsets()">
+            
+            <div class="progress-container" style="margin-top:15px;">
+                <div class="progress-bar" id="progressBar"></div>
+                <div class="progress-text" id="progressText">0%</div>
+            </div>
+            
+            <div style="margin-top:10px;">
+                <span id="scanStatus" style="color:#ff0;">● IDLE</span>
+                <span id="bytesRead" style="color:#666; margin-left:10px;">0 MB</span>
+                <span id="foundCount" style="color:#0f0; margin-left:10px;">0/8 found</span>
+            </div>
+            
+            <button id="cancelBtn" onclick="cancelScan()" style="display:none; background:#330000;">STOP SCAN</button>
+        </div>
+        
+        <div class="panel">
+            <h3>EXTRACTED OFFSETS</h3>
+            <textarea id="offsetsOutput" rows="20" readonly placeholder="Offsets will appear here..."></textarea>
+            <button onclick="copyOffsets()">COPY TO CLIPBOARD</button>
+        </div>
+    </div>
     
-    <div id="preview" class="preview"></div>
-    <div id="status"></div>
+    <div id="status" class="status">Ready - Select a dump.cs file</div>
 </div>
 
 <script>
-function analyzeDump() {
+let scanActive = false;
+let scanCancelled = false;
+let allOffsets = [];
+
+function extractObfuscatedOffsets() {
     const file = document.getElementById('dumpFile').files[0];
     if (!file) return;
     
-    const reader = new FileReader();
-    reader.onload = function(e) {
-        const content = e.target.result;
-        const lines = content.split('\n');
-        
-        let preview = '=== FILE INFO ===\n';
-        preview += `File size: ${(content.length / 1024 / 1024).toFixed(2)} MB\n`;
-        preview += `Total lines: ${lines.length.toLocaleString()}\n\n`;
-        preview += '=== FIRST 50 LINES ===\n';
-        
-        for (let i = 0; i < Math.min(50, lines.length); i++) {
-            preview += `Line ${i+1}: ${lines[i].substring(0, 200)}\n`;
+    scanActive = true;
+    scanCancelled = false;
+    allOffsets = [];
+    
+    document.getElementById('offsetsOutput').value = '';
+    document.getElementById('progressBar').style.width = '0%';
+    document.getElementById('progressText').innerHTML = '0%';
+    document.getElementById('cancelBtn').style.display = 'inline-block';
+    document.getElementById('scanStatus').innerHTML = '● SCANNING';
+    document.getElementById('scanStatus').style.color = '#0f0';
+    document.getElementById('bytesRead').innerHTML = '0 MB';
+    document.getElementById('foundCount').innerHTML = '0/?';
+    document.getElementById('status').innerHTML = `[STATUS] Scanning ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)...`;
+    
+    const chunkSize = 1024 * 1024 * 10; // 10 MB chunks
+    let offset = 0;
+    let leftover = '';
+    let totalMatches = 0;
+    let uniqueOffsets = new Map();
+    
+    function processNextChunk() {
+        if (scanCancelled) {
+            finishScan(true);
+            return;
         }
         
-        preview += '\n=== SEARCHING FOR OFFSET PATTERNS ===\n';
+        const chunk = file.slice(offset, offset + chunkSize);
+        const reader = new FileReader();
         
-        // Search for common offset patterns
-        const patterns = [
-            { name: 'RVA pattern', regex: /RVA:\s*0x([0-9A-Fa-f]+)/gi },
-            { name: 'Offset pattern', regex: /Offset:\s*0x([0-9A-Fa-f]+)/gi },
-            { name: '0x pattern', regex: /0x[0-9A-Fa-f]{8,16}/gi },
-            { name: 'get_ function', regex: /get_\w+\s*\(/gi },
-            { name: 'public function', regex: /public\s+\w+\s+\w+\s*\(/gi }
-        ];
-        
-        for (const p of patterns) {
-            const matches = content.match(p.regex);
-            if (matches) {
-                preview += `\n${p.name}: ${matches.length} occurrences\n`;
-                preview += `Example: ${matches.slice(0, 3).join(', ')}\n`;
-            } else {
-                preview += `\n${p.name}: NOT FOUND\n`;
+        reader.onload = function(e) {
+            let text = leftover + e.target.result;
+            const lines = text.split('\n');
+            leftover = lines.pop();
+            
+            // Pattern to find RVA or Offset
+            const rvaPattern = /(?:RVA|Offset):\s*0x([0-9A-Fa-f]+)/gi;
+            
+            for (const line of lines) {
+                let match;
+                while ((match = rvaPattern.exec(line)) !== null) {
+                    const offsetValue = `0x${match[1]}`;
+                    if (!uniqueOffsets.has(offsetValue)) {
+                        // Try to extract context (function name if available)
+                        let context = '';
+                        const funcMatch = line.match(/public\s+\w+\s+(\w+)\s*\(/);
+                        if (funcMatch) {
+                            context = ` (${funcMatch[1]})`;
+                        }
+                        uniqueOffsets.set(offsetValue, { offset: offsetValue, context: context, line: line.substring(0, 100) });
+                        totalMatches++;
+                        updateFoundCount(uniqueOffsets.size);
+                    }
+                }
             }
+            
+            offset += chunkSize;
+            const percent = Math.min(100, (offset / file.size) * 100);
+            document.getElementById('progressBar').style.width = `${percent}%`;
+            document.getElementById('progressText').innerHTML = `${Math.round(percent)}%`;
+            document.getElementById('bytesRead').innerHTML = `${(offset / 1024 / 1024).toFixed(1)} MB`;
+            document.getElementById('status').innerHTML = `[STATUS] Scanning... ${Math.round(percent)}% | ${uniqueOffsets.size} unique offsets found`;
+            
+            if (offset < file.size) {
+                setTimeout(processNextChunk, 10);
+            } else {
+                finishScan(false, uniqueOffsets);
+            }
+        };
+        
+        reader.onerror = function() {
+            document.getElementById('status').innerHTML = '[ERROR] Failed to read file';
+            finishScan(true);
+        };
+        
+        reader.readAsText(chunk);
+    }
+    
+    function updateFoundCount(count) {
+        document.getElementById('foundCount').innerHTML = `${count} found`;
+    }
+    
+    function finishScan(cancelled, uniqueOffsets) {
+        scanActive = false;
+        document.getElementById('cancelBtn').style.display = 'none';
+        
+        if (cancelled) {
+            document.getElementById('scanStatus').innerHTML = '● CANCELLED';
+            document.getElementById('scanStatus').style.color = '#ff0';
+            document.getElementById('status').innerHTML = '[CANCELLED] Scan stopped by user.';
+            return;
         }
         
-        document.getElementById('preview').innerHTML = preview.replace(/\n/g, '<br>');
-        document.getElementById('status').innerHTML = 'Analysis complete. Look at the preview to understand your dump format.';
-    };
-    reader.readAsText(file);
+        document.getElementById('scanStatus').innerHTML = '● COMPLETE';
+        document.getElementById('scanStatus').style.color = '#0f0';
+        document.getElementById('progressBar').style.width = '100%';
+        document.getElementById('progressText').innerHTML = '100%';
+        
+        // Generate output
+        let output = '// ============ ALL OFFSETS FOUND ============\n';
+        output += `// Total unique offsets: ${uniqueOffsets.size}\n\n`;
+        
+        // Group by offset value
+        const sortedOffsets = Array.from(uniqueOffsets.values()).sort((a, b) => {
+            return parseInt(a.offset, 16) - parseInt(b.offset, 16);
+        });
+        
+        for (const item of sortedOffsets) {
+            output += `#define OFFSET_${item.offset.substring(2)}    ${item.offset}${item.context}\n`;
+        }
+        
+        output += `\n// ============ SUGGESTED OFFSETS ============\n`;
+        output += `// You need to manually identify which offset corresponds to:\n`;
+        output += `// - get_LocalPlayer\n`;
+        output += `// - get_Players\n`;
+        output += `// - get_Position\n`;
+        output += `// - get_Rotation\n`;
+        output += `// - get_Team\n`;
+        output += `// - get_Health\n`;
+        output += `// - WorldToScreenPoint\n`;
+        output += `// - Camera.get_main\n`;
+        
+        document.getElementById('offsetsOutput').value = output;
+        document.getElementById('status').innerHTML = `[COMPLETE] ${uniqueOffsets.size} unique offsets found. Due to obfuscation, you need to identify which offset corresponds to which function manually.`;
+    }
+    
+    processNextChunk();
+}
+
+function cancelScan() {
+    if (scanActive) {
+        scanCancelled = true;
+        document.getElementById('scanStatus').innerHTML = '● CANCELLING...';
+        document.getElementById('status').innerHTML = '[STATUS] Cancelling scan...';
+    }
+}
+
+function copyOffsets() {
+    navigator.clipboard.writeText(document.getElementById('offsetsOutput').value);
+    document.getElementById('status').innerHTML = '[INFO] Offsets copied to clipboard';
 }
 </script>
 </body>
