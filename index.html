@@ -28,18 +28,21 @@
         .status { margin-top: 15px; padding: 12px; background: #0a0a0a; border-left: 2px solid #fff; color: #ccc; font-size: 12px; max-height: 200px; overflow-y: auto; }
         .file-zone { border: 1px dashed #333; padding: 30px; text-align: center; margin-bottom: 15px; cursor: pointer; transition: all 0.2s; }
         .file-zone:hover { border-color: #0f0; background: #0a0a0a; }
-        .progress-bar { width: 100%; height: 3px; background: #1a1a1a; margin-top: 10px; }
-        .progress-fill { width: 0%; height: 100%; background: #0f0; transition: width 0.3s; }
+        .progress-container { width: 100%; background: #1a1a1a; margin-top: 10px; position: relative; }
+        .progress-bar { width: 0%; height: 20px; background: #0f0; transition: width 0.3s; }
+        .progress-text { position: absolute; top: 2px; left: 10px; color: #000; font-size: 11px; font-weight: bold; }
         .download-link { display: inline-block; margin-top: 10px; padding: 10px 20px; background: #0a0a0a; border: 1px solid #0f0; color: #0f0; text-decoration: none; }
         .info-text { color: #666; font-size: 11px; margin-top: 5px; }
         hr { border-color: #333; margin: 15px 0; }
+        .scanning-line { color: #0f0; animation: pulse 1s infinite; }
+        @keyframes pulse { 0% { opacity: 0.5; } 100% { opacity: 1; } }
     </style>
 </head>
 <body>
 <div class="container">
     <div class="header">
         <h1>NEXUS OFFSETS & DYLIB BUILDER</h1>
-        <p>Extract offsets from dump.cs | Build dylib from Tweak.xm</p>
+        <p>Extract offsets from dump.cs (any size) | Build dylib from Tweak.xm</p>
     </div>
     
     <div class="tabs">
@@ -54,11 +57,22 @@
                 <h3>DUMP.CS FILE</h3>
                 <div class="file-zone" onclick="document.getElementById('dumpFile').click()">
                     <p style="color:#666;">📁 CLICK TO SELECT DUMP.CS FILE</p>
-                    <p style="color:#444; font-size:12px;">Supports any file size - processes line by line</p>
+                    <p style="color:#444; font-size:12px;">Supports any file size - scans ALL lines until found</p>
                 </div>
                 <input type="file" id="dumpFile" accept=".cs,.txt" style="display:none;" onchange="startAnalysis()">
-                <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
-                <button id="cancelBtn" onclick="cancelAnalysis()" style="display:none;">CANCEL</button>
+                
+                <div class="progress-container" style="margin-top:15px;">
+                    <div class="progress-bar" id="progressBar"></div>
+                    <div class="progress-text" id="progressText">0%</div>
+                </div>
+                
+                <div style="margin-top:10px;">
+                    <span id="scanStatus" style="color:#ff0;">● IDLE</span>
+                    <span id="linesProcessed" style="color:#666; margin-left:10px;">0 lines</span>
+                    <span id="foundCount" style="color:#0f0; margin-left:10px;">0/8 found</span>
+                </div>
+                
+                <button id="cancelBtn" onclick="cancelAnalysis()" style="display:none; background:#330000;">STOP SCAN</button>
             </div>
             <div class="panel">
                 <h3>EXTRACTED OFFSETS</h3>
@@ -67,10 +81,10 @@
                 <button onclick="sendToBuilder()">SEND TO BUILDER</button>
             </div>
         </div>
-        <div id="offsetsStatus" class="status">Ready - Select a dump.cs file to begin</div>
+        <div id="offsetsStatus" class="status">Ready - Select a dump.cs file</div>
     </div>
     
-    <!-- Tab 2: Dylib Builder -->
+    <!-- Tab 2: Dylib Builder (same as before, will update if needed) -->
     <div id="builder" class="tab-content">
         <div class="grid">
             <div class="panel">
@@ -90,7 +104,7 @@
                     <input type="text" id="tweakName" value="NexusMod">
                 </div>
                 <button id="buildBtn" onclick="buildDylib()">BUILD DYLIB</button>
-                <div class="progress-bar" id="buildProgress"><div class="progress-fill" id="buildProgressFill"></div></div>
+                <div class="progress-container" id="buildProgress" style="display:none;"><div class="progress-bar" id="buildProgressFill"></div></div>
             </div>
             <div class="panel">
                 <h3>OUTPUT</h3>
@@ -104,29 +118,21 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script>
 // ============ OFFSETS EXTRACTOR ============
-let currentOffsets = {
-    'OFFSET_GET_LOCAL_PLAYER': null,
-    'OFFSET_GET_PLAYERS_LIST': null,
-    'OFFSET_GET_TEAM': null,
-    'OFFSET_GET_POSITION': null,
-    'OFFSET_GET_ROTATION': null,
-    'OFFSET_SET_ROTATION': null,
-    'OFFSET_CAMERA_GET_MAIN': null,
-    'OFFSET_WORLD_TO_SCREEN': null
-};
-
+let currentOffsets = {};
 let isAnalyzing = false;
 let analysisCancelled = false;
+let currentFile = null;
 
+// Expanded patterns - more flexible
 const patterns = [
-    { name: 'OFFSET_GET_LOCAL_PLAYER', regex: /get_LocalPlayer\s*\(\)\s*\{\s*\}\s*\/\/\s*RVA:\s*0x([0-9A-Fa-f]+)/i },
-    { name: 'OFFSET_GET_PLAYERS_LIST', regex: /get_Players\s*\(\)\s*\{\s*\}\s*\/\/\s*RVA:\s*0x([0-9A-Fa-f]+)/i },
-    { name: 'OFFSET_GET_TEAM', regex: /get_teamNumber\s*\(\)\s*\{\s*\}\s*\/\/\s*RVA:\s*0x([0-9A-Fa-f]+)/i },
-    { name: 'OFFSET_GET_POSITION', regex: /get_position\s*\(\)\s*\{\s*\}\s*\/\/\s*RVA:\s*0x([0-9A-Fa-f]+)/i },
-    { name: 'OFFSET_GET_ROTATION', regex: /get_rotation\s*\(\)\s*\{\s*\}\s*\/\/\s*RVA:\s*0x([0-9A-Fa-f]+)/i },
-    { name: 'OFFSET_SET_ROTATION', regex: /set_rotation\s*\([^)]+\)\s*\{\s*\}\s*\/\/\s*RVA:\s*0x([0-9A-Fa-f]+)/i },
-    { name: 'OFFSET_CAMERA_GET_MAIN', regex: /get_main\s*\(\)\s*\{\s*\}\s*\/\/\s*RVA:\s*0x([0-9A-Fa-f]+)/i },
-    { name: 'OFFSET_WORLD_TO_SCREEN', regex: /WorldToScreenPoint\s*\([^)]+\)\s*\{\s*\}\s*\/\/\s*RVA:\s*0x([0-9A-Fa-f]+)/i }
+    { name: 'OFFSET_GET_LOCAL_PLAYER', regexes: [/get_LocalPlayer\s*\(\)\s*\{\s*\}\s*\/\/\s*RVA:\s*0x([0-9A-Fa-f]+)/i, /LocalPlayer[^\n]{0,200}0x([0-9A-Fa-f]{8})/i] },
+    { name: 'OFFSET_GET_PLAYERS_LIST', regexes: [/get_Players\s*\(\)\s*\{\s*\}\s*\/\/\s*RVA:\s*0x([0-9A-Fa-f]+)/i, /get_Players[^\n]{0,200}0x([0-9A-Fa-f]{8})/i] },
+    { name: 'OFFSET_GET_TEAM', regexes: [/get_teamNumber\s*\(\)\s*\{\s*\}\s*\/\/\s*RVA:\s*0x([0-9A-Fa-f]+)/i, /get_teamNumber[^\n]{0,200}0x([0-9A-Fa-f]{8})/i, /get_Team[^\n]{0,200}0x([0-9A-Fa-f]{8})/i] },
+    { name: 'OFFSET_GET_POSITION', regexes: [/get_position\s*\(\)\s*\{\s*\}\s*\/\/\s*RVA:\s*0x([0-9A-Fa-f]+)/i, /get_Position[^\n]{0,200}0x([0-9A-Fa-f]{8})/i] },
+    { name: 'OFFSET_GET_ROTATION', regexes: [/get_rotation\s*\(\)\s*\{\s*\}\s*\/\/\s*RVA:\s*0x([0-9A-Fa-f]+)/i, /get_Rotation[^\n]{0,200}0x([0-9A-Fa-f]{8})/i] },
+    { name: 'OFFSET_SET_ROTATION', regexes: [/set_rotation\s*\([^)]+\)\s*\{\s*\}\s*\/\/\s*RVA:\s*0x([0-9A-Fa-f]+)/i, /set_Rotation[^\n]{0,200}0x([0-9A-Fa-f]{8})/i] },
+    { name: 'OFFSET_CAMERA_GET_MAIN', regexes: [/get_main\s*\(\)\s*\{\s*\}\s*\/\/\s*RVA:\s*0x([0-9A-Fa-f]+)/i, /Camera\.get_main[^\n]{0,200}0x([0-9A-Fa-f]{8})/i] },
+    { name: 'OFFSET_WORLD_TO_SCREEN', regexes: [/WorldToScreenPoint\s*\([^)]+\)\s*\{\s*\}\s*\/\/\s*RVA:\s*0x([0-9A-Fa-f]+)/i, /WorldToScreenPoint[^\n]{0,200}0x([0-9A-Fa-f]{8})/i] }
 ];
 
 function switchTab(tabId) {
@@ -140,24 +146,35 @@ function startAnalysis() {
     const file = document.getElementById('dumpFile').files[0];
     if (!file) return;
     
-    for (let key in currentOffsets) currentOffsets[key] = null;
+    currentFile = file;
+    
+    // Reset offsets
+    for (const pattern of patterns) {
+        currentOffsets[pattern.name] = null;
+    }
+    
     isAnalyzing = true;
     analysisCancelled = false;
     
     document.getElementById('offsetsOutput').value = '';
-    document.getElementById('progressFill').style.width = '0%';
+    document.getElementById('progressBar').style.width = '0%';
+    document.getElementById('progressText').innerHTML = '0%';
     document.getElementById('cancelBtn').style.display = 'inline-block';
-    document.getElementById('offsetsStatus').innerHTML = `[STATUS] Analyzing ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)...`;
+    document.getElementById('scanStatus').innerHTML = '● SCANNING';
+    document.getElementById('scanStatus').style.color = '#0f0';
+    document.getElementById('linesProcessed').innerHTML = '0 lines';
+    document.getElementById('foundCount').innerHTML = '0/8 found';
+    document.getElementById('offsetsStatus').innerHTML = `[STATUS] Scanning ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)... This may take several minutes.`;
     
-    const chunkSize = 1024 * 1024;
+    const chunkSize = 1024 * 1024; // 1 MB
     let offset = 0;
     let leftover = '';
+    let totalLines = 0;
+    let lastUpdate = Date.now();
     
     function processNextChunk() {
         if (analysisCancelled) {
-            document.getElementById('offsetsStatus').innerHTML = '[STATUS] Analysis cancelled';
-            isAnalyzing = false;
-            document.getElementById('cancelBtn').style.display = 'none';
+            finishAnalysis(true);
             return;
         }
         
@@ -169,34 +186,53 @@ function startAnalysis() {
             const lines = text.split('\n');
             leftover = lines.pop();
             
-            for (const line of lines) processLine(line);
+            for (const line of lines) {
+                processLine(line);
+                totalLines++;
+            }
             
             offset += chunkSize;
             const percent = Math.min(100, (offset / file.size) * 100);
-            document.getElementById('progressFill').style.width = `${percent}%`;
+            document.getElementById('progressBar').style.width = `${percent}%`;
+            document.getElementById('progressText').innerHTML = `${Math.round(percent)}%`;
             
-            const foundCount = Object.values(currentOffsets).filter(v => v !== null).length;
-            document.getElementById('offsetsStatus').innerHTML = `[STATUS] ${Math.round(percent)}% | Found: ${foundCount}/8 offsets`;
+            // Update lines counter every second
+            if (Date.now() - lastUpdate > 500) {
+                document.getElementById('linesProcessed').innerHTML = `${(totalLines / 1000).toFixed(0)}k lines`;
+                lastUpdate = Date.now();
+            }
+            
+            const found = Object.values(currentOffsets).filter(v => v !== null).length;
+            document.getElementById('foundCount').innerHTML = `${found}/8 found`;
             
             if (offset < file.size) {
-                setTimeout(processNextChunk, 10);
+                // Continue scanning
+                setTimeout(processNextChunk, 5);
             } else {
+                // Process leftover
                 if (leftover.trim()) processLine(leftover);
-                finishAnalysis();
+                finishAnalysis(false);
             }
         };
         
-        reader.onerror = () => document.getElementById('offsetsStatus').innerHTML = '[ERROR] Failed to read file';
+        reader.onerror = function() {
+            document.getElementById('offsetsStatus').innerHTML = '[ERROR] Failed to read file';
+            finishAnalysis(true);
+        };
+        
         reader.readAsText(chunk);
     }
     
     function processLine(line) {
         for (const pattern of patterns) {
             if (currentOffsets[pattern.name] === null) {
-                const match = line.match(pattern.regex);
-                if (match) {
-                    currentOffsets[pattern.name] = `0x${match[1]}`;
-                    updateOutputDisplay();
+                for (const regex of pattern.regexes) {
+                    const match = line.match(regex);
+                    if (match) {
+                        currentOffsets[pattern.name] = `0x${match[1]}`;
+                        updateOutputDisplay();
+                        break;
+                    }
                 }
             }
         }
@@ -206,25 +242,65 @@ function startAnalysis() {
         let output = '// ============ EXTRACTED OFFSETS ============\n\n';
         let found = 0;
         for (const [name, offset] of Object.entries(currentOffsets)) {
-            if (offset !== null) { found++; output += `#define ${name}    ${offset}\n`; }
-            else { output += `#define ${name}    0x00000000\n`; }
+            if (offset !== null) {
+                found++;
+                output += `#define ${name}    ${offset}\n`;
+            } else {
+                output += `#define ${name}    0x00000000  // NOT FOUND YET\n`;
+            }
         }
-        output += `\n// ${found}/8 offsets found\n`;
+        output += `\n// ${found}/8 offsets found so far\n`;
         document.getElementById('offsetsOutput').value = output;
     }
     
-    function finishAnalysis() {
+    function finishAnalysis(cancelled) {
         isAnalyzing = false;
         document.getElementById('cancelBtn').style.display = 'none';
+        
         const found = Object.values(currentOffsets).filter(v => v !== null).length;
-        document.getElementById('offsetsStatus').innerHTML = `[COMPLETE] ${found}/8 offsets found`;
-        updateOutputDisplay();
+        
+        if (cancelled) {
+            document.getElementById('scanStatus').innerHTML = '● CANCELLED';
+            document.getElementById('scanStatus').style.color = '#ff0';
+            document.getElementById('offsetsStatus').innerHTML = '[CANCELLED] Scan was stopped by user.';
+        } else {
+            document.getElementById('scanStatus').innerHTML = '● COMPLETE';
+            document.getElementById('scanStatus').style.color = '#0f0';
+            document.getElementById('progressBar').style.width = '100%';
+            document.getElementById('progressText').innerHTML = '100%';
+            
+            let output = '// ============ EXTRACTED OFFSETS ============\n\n';
+            for (const [name, offset] of Object.entries(currentOffsets)) {
+                if (offset !== null) {
+                    output += `#define ${name}    ${offset}\n`;
+                } else {
+                    output += `#define ${name}    0x00000000  // NOT FOUND\n`;
+                }
+            }
+            output += `\n// ${found}/8 offsets found\n`;
+            document.getElementById('offsetsOutput').value = output;
+            
+            if (found === 0) {
+                document.getElementById('offsetsStatus').innerHTML = '[WARNING] No offsets found. The dump may be obfuscated or in a different format. Try using the AI analysis option.';
+            } else {
+                document.getElementById('offsetsStatus').innerHTML = `[COMPLETE] ${found}/8 offsets found after scanning ${(currentFile.size / 1024 / 1024).toFixed(2)} MB.`;
+            }
+        }
+        
+        const finalFound = Object.values(currentOffsets).filter(v => v !== null).length;
+        document.getElementById('foundCount').innerHTML = `${finalFound}/8 found`;
     }
     
     processNextChunk();
 }
 
-function cancelAnalysis() { analysisCancelled = true; }
+function cancelAnalysis() {
+    if (isAnalyzing) {
+        analysisCancelled = true;
+        document.getElementById('scanStatus').innerHTML = '● CANCELLING...';
+        document.getElementById('offsetsStatus').innerHTML = '[STATUS] Cancelling scan...';
+    }
+}
 
 function copyOffsets() {
     navigator.clipboard.writeText(document.getElementById('offsetsOutput').value);
@@ -234,12 +310,15 @@ function copyOffsets() {
 function sendToBuilder() {
     const offsetsText = document.getElementById('offsetsOutput').value;
     const tweakCode = document.getElementById('tweakCode').value;
-    if (!tweakCode) { document.getElementById('offsetsStatus').innerHTML = '[ERROR] No Tweak.xm code in builder tab'; return; }
+    if (!tweakCode) {
+        document.getElementById('offsetsStatus').innerHTML = '[ERROR] No Tweak.xm code in builder tab';
+        return;
+    }
     
     let newCode = tweakCode;
     const lines = offsetsText.split('\n');
     for (const line of lines) {
-        if (line.startsWith('#define')) {
+        if (line.startsWith('#define') && !line.includes('NOT FOUND')) {
             const parts = line.split(/\s+/);
             if (parts.length >= 3) {
                 const name = parts[1];
@@ -254,7 +333,7 @@ function sendToBuilder() {
     switchTab('builder');
 }
 
-// ============ DYLIB BUILDER ============
+// ============ DYLIB BUILDER (same as before, kept for completeness) ============
 let pollingInterval = null;
 
 async function buildDylib() {
@@ -263,7 +342,6 @@ async function buildDylib() {
     const repoPath = document.getElementById('repoPath').value;
     const tweakName = document.getElementById('tweakName').value.trim() || 'NexusMod';
     const output = document.getElementById('builderOutput');
-    const progressFill = document.getElementById('buildProgressFill');
     const buildBtn = document.getElementById('buildBtn');
     
     if (!tweakCode.trim()) { output.innerHTML = '[ERROR] Please paste Tweak.xm code'; return; }
@@ -276,6 +354,7 @@ async function buildDylib() {
     buildBtn.disabled = true;
     output.innerHTML = '[STATUS] Generating files...';
     document.getElementById('buildProgress').style.display = 'block';
+    const progressFill = document.getElementById('buildProgressFill');
     progressFill.style.width = '10%';
     
     const files = generateTweakFiles(tweakCode, tweakName);
@@ -305,7 +384,7 @@ async function buildDylib() {
     
     const triggered = await triggerWorkflow(token, owner, repo);
     if (!triggered) {
-        output.innerHTML = '[ERROR] Failed to trigger workflow. Check if build.yml exists.';
+        output.innerHTML = '[ERROR] Failed to trigger workflow.';
         buildBtn.disabled = false;
         return;
     }
@@ -319,7 +398,7 @@ async function buildDylib() {
 function generateTweakFiles(tweakCode, tweakName) {
     const files = {};
     files[`${tweakName}/Tweak.xm`] = tweakCode;
-    files[`${tweakName}/Makefile`] = `export TARGET = iphone:latest:15.0\nexport ARCHS = arm64\n\ninclude $(THEOS)/makefiles/common.mk\n\nTWEAK_NAME = ${tweakName}\n${tweakName}_FILES = Tweak.xm\n${tweakName}_FRAMEWORKS = UIKit StoreKit QuartzCore\n\ninclude $(THEOS)/makefiles/tweak.mk`;
+    files[`${tweakName}/Makefile`] = `export TARGET = iphone:latest:15.0\nexport ARCHS = arm64\n\ninclude $(THEOS)/makefiles/common.mk\n\nTWEAK_NAME = ${tweakName}\n${tweakName}_FILES = Tweak.xm\n${tweakName}_FRAMEWORMS = UIKit StoreKit QuartzCore\n\ninclude $(THEOS)/makefiles/tweak.mk`;
     files[`${tweakName}/control`] = `Package: com.nexus.${tweakName.toLowerCase()}\nName: ${tweakName}\nVersion: 1.0\nArchitecture: iphoneos-arm64\nDescription: Nexus Mod\nMaintainer: Nexus\nAuthor: Nexus\nSection: Tweaks`;
     files[`${tweakName}/${tweakName}.plist`] = `<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0">\n<dict>\n    <key>Filter</key>\n    <dict>\n        <key>Bundles</key>\n        <array>\n            <string>com.apple.UIKit</string>\n        </array>\n    </dict>\n</dict>\n</plist>`;
     files[`${tweakName}/.github/workflows/build.yml`] = `name: Build Tweak\n\non:\n  push:\n  workflow_dispatch:\n\njobs:\n  build:\n    runs-on: macos-latest\n    steps:\n      - uses: actions/checkout@v4\n      - name: Install Theos dependencies\n        run: brew install ldid xz\n      - name: Checkout Theos\n        uses: actions/checkout@v4\n        with:\n          repository: theos/theos\n          path: theos\n          submodules: recursive\n      - name: Setup Theos\n        run: |\n          export THEOS=$(pwd)/theos\n          echo "THEOS=$THEOS" >> $GITHUB_ENV\n          echo "$THEOS/bin" >> $GITHUB_PATH\n      - name: Build Package\n        run: |\n          export THEOS=$(pwd)/theos\n          make package\n      - name: Upload .dylib\n        uses: actions/upload-artifact@v4\n        with:\n          name: ${tweakName}_dylib\n          path: .theos/obj/debug/*.dylib`;
