@@ -34,15 +34,13 @@
         .download-link { display: inline-block; margin-top: 10px; padding: 10px 20px; background: #0a0a0a; border: 1px solid #0f0; color: #0f0; text-decoration: none; }
         .info-text { color: #666; font-size: 11px; margin-top: 5px; }
         hr { border-color: #333; margin: 15px 0; }
-        .scanning-line { color: #0f0; animation: pulse 1s infinite; }
-        @keyframes pulse { 0% { opacity: 0.5; } 100% { opacity: 1; } }
     </style>
 </head>
 <body>
 <div class="container">
     <div class="header">
         <h1>NEXUS OFFSETS & DYLIB BUILDER</h1>
-        <p>Extract offsets from dump.cs (any size) | Build dylib from Tweak.xm</p>
+        <p>Extract offsets from dump.cs | Build dylib from Tweak.xm</p>
     </div>
     
     <div class="tabs">
@@ -84,7 +82,7 @@
         <div id="offsetsStatus" class="status">Ready - Select a dump.cs file</div>
     </div>
     
-    <!-- Tab 2: Dylib Builder (same as before, will update if needed) -->
+    <!-- Tab 2: Dylib Builder -->
     <div id="builder" class="tab-content">
         <div class="grid">
             <div class="panel">
@@ -122,8 +120,8 @@ let currentOffsets = {};
 let isAnalyzing = false;
 let analysisCancelled = false;
 let currentFile = null;
+let scanInterval = null;
 
-// Expanded patterns - more flexible
 const patterns = [
     { name: 'OFFSET_GET_LOCAL_PLAYER', regexes: [/get_LocalPlayer\s*\(\)\s*\{\s*\}\s*\/\/\s*RVA:\s*0x([0-9A-Fa-f]+)/i, /LocalPlayer[^\n]{0,200}0x([0-9A-Fa-f]{8})/i] },
     { name: 'OFFSET_GET_PLAYERS_LIST', regexes: [/get_Players\s*\(\)\s*\{\s*\}\s*\/\/\s*RVA:\s*0x([0-9A-Fa-f]+)/i, /get_Players[^\n]{0,200}0x([0-9A-Fa-f]{8})/i] },
@@ -148,7 +146,6 @@ function startAnalysis() {
     
     currentFile = file;
     
-    // Reset offsets
     for (const pattern of patterns) {
         currentOffsets[pattern.name] = null;
     }
@@ -166,7 +163,7 @@ function startAnalysis() {
     document.getElementById('foundCount').innerHTML = '0/8 found';
     document.getElementById('offsetsStatus').innerHTML = `[STATUS] Scanning ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)... This may take several minutes.`;
     
-    const chunkSize = 1024 * 1024; // 1 MB
+    const chunkSize = 1024 * 1024;
     let offset = 0;
     let leftover = '';
     let totalLines = 0;
@@ -187,7 +184,18 @@ function startAnalysis() {
             leftover = lines.pop();
             
             for (const line of lines) {
-                processLine(line);
+                for (const pattern of patterns) {
+                    if (currentOffsets[pattern.name] === null) {
+                        for (const regex of pattern.regexes) {
+                            const match = line.match(regex);
+                            if (match) {
+                                currentOffsets[pattern.name] = `0x${match[1]}`;
+                                updateOutputDisplay();
+                                break;
+                            }
+                        }
+                    }
+                }
                 totalLines++;
             }
             
@@ -196,7 +204,6 @@ function startAnalysis() {
             document.getElementById('progressBar').style.width = `${percent}%`;
             document.getElementById('progressText').innerHTML = `${Math.round(percent)}%`;
             
-            // Update lines counter every second
             if (Date.now() - lastUpdate > 500) {
                 document.getElementById('linesProcessed').innerHTML = `${(totalLines / 1000).toFixed(0)}k lines`;
                 lastUpdate = Date.now();
@@ -206,11 +213,22 @@ function startAnalysis() {
             document.getElementById('foundCount').innerHTML = `${found}/8 found`;
             
             if (offset < file.size) {
-                // Continue scanning
                 setTimeout(processNextChunk, 5);
             } else {
-                // Process leftover
-                if (leftover.trim()) processLine(leftover);
+                if (leftover.trim()) {
+                    for (const pattern of patterns) {
+                        if (currentOffsets[pattern.name] === null) {
+                            for (const regex of pattern.regexes) {
+                                const match = leftover.match(regex);
+                                if (match) {
+                                    currentOffsets[pattern.name] = `0x${match[1]}`;
+                                    updateOutputDisplay();
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
                 finishAnalysis(false);
             }
         };
@@ -223,33 +241,15 @@ function startAnalysis() {
         reader.readAsText(chunk);
     }
     
-    function processLine(line) {
-        for (const pattern of patterns) {
-            if (currentOffsets[pattern.name] === null) {
-                for (const regex of pattern.regexes) {
-                    const match = line.match(regex);
-                    if (match) {
-                        currentOffsets[pattern.name] = `0x${match[1]}`;
-                        updateOutputDisplay();
-                        break;
-                    }
-                }
-            }
-        }
-    }
-    
     function updateOutputDisplay() {
         let output = '// ============ EXTRACTED OFFSETS ============\n\n';
-        let found = 0;
         for (const [name, offset] of Object.entries(currentOffsets)) {
             if (offset !== null) {
-                found++;
                 output += `#define ${name}    ${offset}\n`;
             } else {
-                output += `#define ${name}    0x00000000  // NOT FOUND YET\n`;
+                output += `#define ${name}    0x00000000\n`;
             }
         }
-        output += `\n// ${found}/8 offsets found so far\n`;
         document.getElementById('offsetsOutput').value = output;
     }
     
@@ -274,21 +274,19 @@ function startAnalysis() {
                 if (offset !== null) {
                     output += `#define ${name}    ${offset}\n`;
                 } else {
-                    output += `#define ${name}    0x00000000  // NOT FOUND\n`;
+                    output += `#define ${name}    0x00000000\n`;
                 }
             }
-            output += `\n// ${found}/8 offsets found\n`;
             document.getElementById('offsetsOutput').value = output;
             
             if (found === 0) {
-                document.getElementById('offsetsStatus').innerHTML = '[WARNING] No offsets found. The dump may be obfuscated or in a different format. Try using the AI analysis option.';
+                document.getElementById('offsetsStatus').innerHTML = '[WARNING] No offsets found. The dump may be obfuscated or in a different format.';
             } else {
                 document.getElementById('offsetsStatus').innerHTML = `[COMPLETE] ${found}/8 offsets found after scanning ${(currentFile.size / 1024 / 1024).toFixed(2)} MB.`;
             }
         }
         
-        const finalFound = Object.values(currentOffsets).filter(v => v !== null).length;
-        document.getElementById('foundCount').innerHTML = `${finalFound}/8 found`;
+        document.getElementById('foundCount').innerHTML = `${found}/8 found`;
     }
     
     processNextChunk();
@@ -318,9 +316,9 @@ function sendToBuilder() {
     let newCode = tweakCode;
     const lines = offsetsText.split('\n');
     for (const line of lines) {
-        if (line.startsWith('#define') && !line.includes('NOT FOUND')) {
+        if (line.startsWith('#define')) {
             const parts = line.split(/\s+/);
-            if (parts.length >= 3) {
+            if (parts.length >= 3 && parts[2] !== '0x00000000') {
                 const name = parts[1];
                 const offset = parts[2];
                 const regex = new RegExp(`#define ${name}\\s+0x[0-9A-Fa-f]+`, 'i');
@@ -333,7 +331,7 @@ function sendToBuilder() {
     switchTab('builder');
 }
 
-// ============ DYLIB BUILDER (same as before, kept for completeness) ============
+// ============ DYLIB BUILDER ============
 let pollingInterval = null;
 
 async function buildDylib() {
@@ -398,7 +396,7 @@ async function buildDylib() {
 function generateTweakFiles(tweakCode, tweakName) {
     const files = {};
     files[`${tweakName}/Tweak.xm`] = tweakCode;
-    files[`${tweakName}/Makefile`] = `export TARGET = iphone:latest:15.0\nexport ARCHS = arm64\n\ninclude $(THEOS)/makefiles/common.mk\n\nTWEAK_NAME = ${tweakName}\n${tweakName}_FILES = Tweak.xm\n${tweakName}_FRAMEWORMS = UIKit StoreKit QuartzCore\n\ninclude $(THEOS)/makefiles/tweak.mk`;
+    files[`${tweakName}/Makefile`] = `export TARGET = iphone:latest:15.0\nexport ARCHS = arm64\n\ninclude $(THEOS)/makefiles/common.mk\n\nTWEAK_NAME = ${tweakName}\n${tweakName}_FILES = Tweak.xm\n${tweakName}_FRAMEWORKS = UIKit StoreKit QuartzCore\n\ninclude $(THEOS)/makefiles/tweak.mk`;
     files[`${tweakName}/control`] = `Package: com.nexus.${tweakName.toLowerCase()}\nName: ${tweakName}\nVersion: 1.0\nArchitecture: iphoneos-arm64\nDescription: Nexus Mod\nMaintainer: Nexus\nAuthor: Nexus\nSection: Tweaks`;
     files[`${tweakName}/${tweakName}.plist`] = `<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0">\n<dict>\n    <key>Filter</key>\n    <dict>\n        <key>Bundles</key>\n        <array>\n            <string>com.apple.UIKit</string>\n        </array>\n    </dict>\n</dict>\n</plist>`;
     files[`${tweakName}/.github/workflows/build.yml`] = `name: Build Tweak\n\non:\n  push:\n  workflow_dispatch:\n\njobs:\n  build:\n    runs-on: macos-latest\n    steps:\n      - uses: actions/checkout@v4\n      - name: Install Theos dependencies\n        run: brew install ldid xz\n      - name: Checkout Theos\n        uses: actions/checkout@v4\n        with:\n          repository: theos/theos\n          path: theos\n          submodules: recursive\n      - name: Setup Theos\n        run: |\n          export THEOS=$(pwd)/theos\n          echo "THEOS=$THEOS" >> $GITHUB_ENV\n          echo "$THEOS/bin" >> $GITHUB_PATH\n      - name: Build Package\n        run: |\n          export THEOS=$(pwd)/theos\n          make package\n      - name: Upload .dylib\n        uses: actions/upload-artifact@v4\n        with:\n          name: ${tweakName}_dylib\n          path: .theos/obj/debug/*.dylib`;
