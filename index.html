@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NEXUS - Offsets Extractor (Big File Support)</title>
+    <title>NEXUS - Offsets & Dylib Builder</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { background: #000000; font-family: 'Courier New', monospace; min-height: 100vh; padding: 20px; }
@@ -11,12 +11,18 @@
         .header { text-align: center; margin-bottom: 30px; padding-bottom: 20px; border-bottom: 1px solid #333; }
         .header h1 { color: #fff; font-size: 1.8em; font-weight: normal; letter-spacing: 2px; }
         .header p { color: #666; margin-top: 10px; }
+        .tabs { display: flex; gap: 0; margin-bottom: 20px; border-bottom: 1px solid #333; flex-wrap: wrap; }
+        .tab-btn { background: #000; color: #ccc; border: 1px solid #333; border-bottom: none; padding: 12px 24px; cursor: pointer; font-family: monospace; }
+        .tab-btn.active { background: #111; color: #fff; border-color: #fff; }
+        .tab-content { display: none; background: #0a0a0a; border: 1px solid #333; padding: 20px; }
+        .tab-content.active { display: block; }
         .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
         @media (max-width: 768px) { .grid { grid-template-columns: 1fr; } }
         .panel { background: #0a0a0a; border: 1px solid #333; padding: 20px; }
         .panel h3 { color: #fff; margin-bottom: 15px; font-weight: normal; }
         textarea { width: 100%; background: #000; color: #0f0; border: 1px solid #333; font-family: monospace; font-size: 12px; padding: 12px; resize: vertical; }
-        button { background: #111; color: #fff; border: 1px solid #333; padding: 12px 24px; cursor: pointer; font-family: monospace; margin-top: 10px; }
+        input { width: 100%; background: #000; color: #fff; border: 1px solid #333; padding: 10px; font-family: monospace; }
+        button { background: #111; color: #fff; border: 1px solid #333; padding: 12px 24px; cursor: pointer; font-family: monospace; margin-top: 10px; transition: all 0.2s; }
         button:hover { background: #222; border-color: #fff; }
         button:disabled { opacity: 0.5; cursor: not-allowed; }
         .status { margin-top: 15px; padding: 12px; background: #0a0a0a; border-left: 2px solid #fff; color: #ccc; font-size: 12px; max-height: 200px; overflow-y: auto; }
@@ -24,44 +30,80 @@
         .file-zone:hover { border-color: #0f0; background: #0a0a0a; }
         .progress-bar { width: 100%; height: 3px; background: #1a1a1a; margin-top: 10px; }
         .progress-fill { width: 0%; height: 100%; background: #0f0; transition: width 0.3s; }
+        .download-link { display: inline-block; margin-top: 10px; padding: 10px 20px; background: #0a0a0a; border: 1px solid #0f0; color: #0f0; text-decoration: none; }
         .info-text { color: #666; font-size: 11px; margin-top: 5px; }
-        .found-badge { color: #0f0; background: #0a0a0a; padding: 2px 6px; border-radius: 3px; }
+        hr { border-color: #333; margin: 15px 0; }
     </style>
 </head>
 <body>
 <div class="container">
     <div class="header">
-        <h1>NEXUS OFFSETS EXTRACTOR</h1>
-        <p>Analyzes dump.cs line by line - supports files of ANY size (100MB, 200MB, 500MB+)</p>
+        <h1>NEXUS OFFSETS & DYLIB BUILDER</h1>
+        <p>Extract offsets from dump.cs | Build dylib from Tweak.xm</p>
     </div>
     
-    <div class="grid">
-        <div class="panel">
-            <h3>DUMP.CS FILE</h3>
-            <div class="file-zone" id="fileZone" onclick="document.getElementById('dumpFile').click()">
-                <p style="color:#666;">📁 CLICK TO SELECT DUMP.CS FILE</p>
-                <p style="color:#444; font-size:12px;">Supports any file size - processes line by line</p>
-            </div>
-            <input type="file" id="dumpFile" accept=".cs,.txt" style="display:none;" onchange="startAnalysis()">
-            
-            <div class="progress-bar">
-                <div class="progress-fill" id="progressFill"></div>
-            </div>
-            
-            <button id="cancelBtn" onclick="cancelAnalysis()" style="display:none; background:#330000;">CANCEL</button>
-        </div>
-        
-        <div class="panel">
-            <h3>EXTRACTED OFFSETS</h3>
-            <textarea id="offsetsOutput" rows="20" readonly placeholder="Offsets will appear here as they are found..."></textarea>
-            <button onclick="copyOffsets()">COPY TO CLIPBOARD</button>
-        </div>
+    <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab('offsets')">OFFSETS EXTRACTOR</button>
+        <button class="tab-btn" onclick="switchTab('builder')">DYLIB BUILDER</button>
     </div>
     
-    <div id="status" class="status">Ready - Select a dump.cs file to begin</div>
+    <!-- Tab 1: Offsets Extractor -->
+    <div id="offsets" class="tab-content active">
+        <div class="grid">
+            <div class="panel">
+                <h3>DUMP.CS FILE</h3>
+                <div class="file-zone" onclick="document.getElementById('dumpFile').click()">
+                    <p style="color:#666;">📁 CLICK TO SELECT DUMP.CS FILE</p>
+                    <p style="color:#444; font-size:12px;">Supports any file size - processes line by line</p>
+                </div>
+                <input type="file" id="dumpFile" accept=".cs,.txt" style="display:none;" onchange="startAnalysis()">
+                <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+                <button id="cancelBtn" onclick="cancelAnalysis()" style="display:none;">CANCEL</button>
+            </div>
+            <div class="panel">
+                <h3>EXTRACTED OFFSETS</h3>
+                <textarea id="offsetsOutput" rows="20" readonly placeholder="Offsets will appear here as they are found..."></textarea>
+                <button onclick="copyOffsets()">COPY TO CLIPBOARD</button>
+                <button onclick="sendToBuilder()">SEND TO BUILDER</button>
+            </div>
+        </div>
+        <div id="offsetsStatus" class="status">Ready - Select a dump.cs file to begin</div>
+    </div>
+    
+    <!-- Tab 2: Dylib Builder -->
+    <div id="builder" class="tab-content">
+        <div class="grid">
+            <div class="panel">
+                <h3>TWEAK.XM CODE</h3>
+                <textarea id="tweakCode" rows="15" placeholder="Paste your Tweak.xm code here..."></textarea>
+                <div style="margin-top:10px;">
+                    <label style="color:#fff;">GitHub Token (repo scope)</label>
+                    <input type="password" id="githubToken" placeholder="github_pat_...">
+                    <div class="info-text">Create at github.com/settings/tokens - check 'repo'</div>
+                </div>
+                <div style="margin-top:10px;">
+                    <label style="color:#fff;">Repository (owner/name)</label>
+                    <input type="text" id="repoPath" placeholder="username/repo-name">
+                </div>
+                <div style="margin-top:10px;">
+                    <label style="color:#fff;">Tweak Name</label>
+                    <input type="text" id="tweakName" value="NexusMod">
+                </div>
+                <button id="buildBtn" onclick="buildDylib()">BUILD DYLIB</button>
+                <div class="progress-bar" id="buildProgress"><div class="progress-fill" id="buildProgressFill"></div></div>
+            </div>
+            <div class="panel">
+                <h3>OUTPUT</h3>
+                <div id="builderOutput" class="status" style="min-height: 200px;">Ready</div>
+                <div id="downloadSection" style="display:none;"><hr><a id="downloadLink" class="download-link">DOWNLOAD DYLIB</a></div>
+            </div>
+        </div>
+    </div>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script>
+// ============ OFFSETS EXTRACTOR ============
 let currentOffsets = {
     'OFFSET_GET_LOCAL_PLAYER': null,
     'OFFSET_GET_PLAYERS_LIST': null,
@@ -75,10 +117,7 @@ let currentOffsets = {
 
 let isAnalyzing = false;
 let analysisCancelled = false;
-let totalLines = 0;
-let processedLines = 0;
 
-// Patterns to search for
 const patterns = [
     { name: 'OFFSET_GET_LOCAL_PLAYER', regex: /get_LocalPlayer\s*\(\)\s*\{\s*\}\s*\/\/\s*RVA:\s*0x([0-9A-Fa-f]+)/i },
     { name: 'OFFSET_GET_PLAYERS_LIST', regex: /get_Players\s*\(\)\s*\{\s*\}\s*\/\/\s*RVA:\s*0x([0-9A-Fa-f]+)/i },
@@ -90,32 +129,33 @@ const patterns = [
     { name: 'OFFSET_WORLD_TO_SCREEN', regex: /WorldToScreenPoint\s*\([^)]+\)\s*\{\s*\}\s*\/\/\s*RVA:\s*0x([0-9A-Fa-f]+)/i }
 ];
 
+function switchTab(tabId) {
+    document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
+    document.getElementById(tabId).classList.add('active');
+    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+    event.target.classList.add('active');
+}
+
 function startAnalysis() {
     const file = document.getElementById('dumpFile').files[0];
     if (!file) return;
     
-    // Reset
-    for (let key in currentOffsets) {
-        currentOffsets[key] = null;
-    }
+    for (let key in currentOffsets) currentOffsets[key] = null;
     isAnalyzing = true;
     analysisCancelled = false;
-    totalLines = 0;
-    processedLines = 0;
     
     document.getElementById('offsetsOutput').value = '';
     document.getElementById('progressFill').style.width = '0%';
     document.getElementById('cancelBtn').style.display = 'inline-block';
-    document.getElementById('status').innerHTML = `[STATUS] Analyzing ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)... Line by line processing...`;
+    document.getElementById('offsetsStatus').innerHTML = `[STATUS] Analyzing ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)...`;
     
-    // Process file line by line using File API streaming
-    const chunkSize = 1024 * 1024; // 1 MB chunks
+    const chunkSize = 1024 * 1024;
     let offset = 0;
     let leftover = '';
     
     function processNextChunk() {
         if (analysisCancelled) {
-            document.getElementById('status').innerHTML = '[STATUS] Analysis cancelled';
+            document.getElementById('offsetsStatus').innerHTML = '[STATUS] Analysis cancelled';
             isAnalyzing = false;
             document.getElementById('cancelBtn').style.display = 'none';
             return;
@@ -127,54 +167,36 @@ function startAnalysis() {
         reader.onload = function(e) {
             let text = leftover + e.target.result;
             const lines = text.split('\n');
-            
-            // Keep last line if it might be incomplete
             leftover = lines.pop();
             
-            // Process each line
-            for (const line of lines) {
-                processLine(line);
-                processedLines++;
-            }
+            for (const line of lines) processLine(line);
             
             offset += chunkSize;
             const percent = Math.min(100, (offset / file.size) * 100);
             document.getElementById('progressFill').style.width = `${percent}%`;
             
-            // Update status with progress
             const foundCount = Object.values(currentOffsets).filter(v => v !== null).length;
-            document.getElementById('status').innerHTML = `[STATUS] Processing... ${Math.round(percent)}% | Lines: ${(processedLines/1000).toFixed(0)}k | Found: ${foundCount}/8 offsets`;
+            document.getElementById('offsetsStatus').innerHTML = `[STATUS] ${Math.round(percent)}% | Found: ${foundCount}/8 offsets`;
             
             if (offset < file.size) {
-                // Small delay to let UI breathe
                 setTimeout(processNextChunk, 10);
             } else {
-                // Process leftover
-                if (leftover.trim()) {
-                    processLine(leftover);
-                }
+                if (leftover.trim()) processLine(leftover);
                 finishAnalysis();
             }
         };
         
-        reader.onerror = function() {
-            document.getElementById('status').innerHTML = '[ERROR] Failed to read file';
-            isAnalyzing = false;
-            document.getElementById('cancelBtn').style.display = 'none';
-        };
-        
+        reader.onerror = () => document.getElementById('offsetsStatus').innerHTML = '[ERROR] Failed to read file';
         reader.readAsText(chunk);
     }
     
     function processLine(line) {
-        // Check each pattern
         for (const pattern of patterns) {
             if (currentOffsets[pattern.name] === null) {
                 const match = line.match(pattern.regex);
                 if (match) {
                     currentOffsets[pattern.name] = `0x${match[1]}`;
                     updateOutputDisplay();
-                    document.getElementById('status').innerHTML = `[FOUND] ${pattern.name}: 0x${match[1]} | ${Object.values(currentOffsets).filter(v => v !== null).length}/8 found`;
                 }
             }
         }
@@ -184,59 +206,182 @@ function startAnalysis() {
         let output = '// ============ EXTRACTED OFFSETS ============\n\n';
         let found = 0;
         for (const [name, offset] of Object.entries(currentOffsets)) {
-            if (offset !== null) {
-                found++;
-                output += `#define ${name}    ${offset}\n`;
-            } else {
-                output += `#define ${name}    0x00000000  // NOT FOUND YET\n`;
-            }
+            if (offset !== null) { found++; output += `#define ${name}    ${offset}\n`; }
+            else { output += `#define ${name}    0x00000000\n`; }
         }
-        output += `\n// ${found}/8 offsets found so far (searching continues...)\n`;
+        output += `\n// ${found}/8 offsets found\n`;
         document.getElementById('offsetsOutput').value = output;
     }
     
     function finishAnalysis() {
         isAnalyzing = false;
         document.getElementById('cancelBtn').style.display = 'none';
-        
-        let output = '// ============ EXTRACTED OFFSETS ============\n\n';
-        let found = 0;
-        for (const [name, offset] of Object.entries(currentOffsets)) {
-            if (offset !== null) {
-                found++;
-                output += `#define ${name}    ${offset}\n`;
-            } else {
-                output += `#define ${name}    0x00000000  // NOT FOUND\n`;
-            }
-        }
-        output += `\n// ${found}/8 offsets found\n`;
-        document.getElementById('offsetsOutput').value = output;
-        document.getElementById('progressFill').style.width = '100%';
-        
-        if (found === 8) {
-            document.getElementById('status').innerHTML = '[SUCCESS] All 8 offsets found!';
-        } else {
-            document.getElementById('status').innerHTML = `[COMPLETE] ${found}/8 offsets found. Some offsets may not exist in this dump.`;
-        }
-        
-        // Auto-scroll to bottom of output
-        const textarea = document.getElementById('offsetsOutput');
-        textarea.scrollTop = textarea.scrollHeight;
+        const found = Object.values(currentOffsets).filter(v => v !== null).length;
+        document.getElementById('offsetsStatus').innerHTML = `[COMPLETE] ${found}/8 offsets found`;
+        updateOutputDisplay();
     }
     
     processNextChunk();
 }
 
-function cancelAnalysis() {
-    analysisCancelled = true;
-    isAnalyzing = false;
-    document.getElementById('status').innerHTML = '[STATUS] Cancelling... Please wait';
-}
+function cancelAnalysis() { analysisCancelled = true; }
 
 function copyOffsets() {
-    const text = document.getElementById('offsetsOutput').value;
-    navigator.clipboard.writeText(text);
-    document.getElementById('status').innerHTML = '[INFO] Offsets copied to clipboard';
+    navigator.clipboard.writeText(document.getElementById('offsetsOutput').value);
+    document.getElementById('offsetsStatus').innerHTML = '[INFO] Offsets copied to clipboard';
+}
+
+function sendToBuilder() {
+    const offsetsText = document.getElementById('offsetsOutput').value;
+    const tweakCode = document.getElementById('tweakCode').value;
+    if (!tweakCode) { document.getElementById('offsetsStatus').innerHTML = '[ERROR] No Tweak.xm code in builder tab'; return; }
+    
+    let newCode = tweakCode;
+    const lines = offsetsText.split('\n');
+    for (const line of lines) {
+        if (line.startsWith('#define')) {
+            const parts = line.split(/\s+/);
+            if (parts.length >= 3) {
+                const name = parts[1];
+                const offset = parts[2];
+                const regex = new RegExp(`#define ${name}\\s+0x[0-9A-Fa-f]+`, 'i');
+                newCode = newCode.replace(regex, `#define ${name}    ${offset}`);
+            }
+        }
+    }
+    document.getElementById('tweakCode').value = newCode;
+    document.getElementById('offsetsStatus').innerHTML = '[SUCCESS] Offsets injected into builder';
+    switchTab('builder');
+}
+
+// ============ DYLIB BUILDER ============
+let pollingInterval = null;
+
+async function buildDylib() {
+    const tweakCode = document.getElementById('tweakCode').value;
+    const token = document.getElementById('githubToken').value;
+    const repoPath = document.getElementById('repoPath').value;
+    const tweakName = document.getElementById('tweakName').value.trim() || 'NexusMod';
+    const output = document.getElementById('builderOutput');
+    const progressFill = document.getElementById('buildProgressFill');
+    const buildBtn = document.getElementById('buildBtn');
+    
+    if (!tweakCode.trim()) { output.innerHTML = '[ERROR] Please paste Tweak.xm code'; return; }
+    if (!token) { output.innerHTML = '[ERROR] GitHub token required'; return; }
+    if (!repoPath) { output.innerHTML = '[ERROR] Repository path required (owner/repo)'; return; }
+    
+    const [owner, repo] = repoPath.split('/');
+    if (!owner || !repo) { output.innerHTML = '[ERROR] Invalid repository format. Use: username/repo-name'; return; }
+    
+    buildBtn.disabled = true;
+    output.innerHTML = '[STATUS] Generating files...';
+    document.getElementById('buildProgress').style.display = 'block';
+    progressFill.style.width = '10%';
+    
+    const files = generateTweakFiles(tweakCode, tweakName);
+    progressFill.style.width = '30%';
+    
+    output.innerHTML = '[STATUS] Uploading to GitHub...';
+    let success = true;
+    let uploaded = 0;
+    const total = Object.keys(files).length;
+    
+    for (const [path, content] of Object.entries(files)) {
+        try {
+            await uploadToGitHub(token, owner, repo, path, content);
+            uploaded++;
+            output.innerHTML = `[STATUS] Uploading... (${uploaded}/${total})`;
+        } catch(e) {
+            output.innerHTML = `[ERROR] Failed to upload ${path}: ${e.message}`;
+            success = false;
+            break;
+        }
+    }
+    
+    if (!success) { buildBtn.disabled = false; return; }
+    
+    progressFill.style.width = '60%';
+    output.innerHTML = '[STATUS] Triggering compilation...';
+    
+    const triggered = await triggerWorkflow(token, owner, repo);
+    if (!triggered) {
+        output.innerHTML = '[ERROR] Failed to trigger workflow. Check if build.yml exists.';
+        buildBtn.disabled = false;
+        return;
+    }
+    
+    progressFill.style.width = '70%';
+    output.innerHTML = '[STATUS] Compilation started. Waiting for result...';
+    
+    startPolling(token, owner, repo, output, progressFill, buildBtn);
+}
+
+function generateTweakFiles(tweakCode, tweakName) {
+    const files = {};
+    files[`${tweakName}/Tweak.xm`] = tweakCode;
+    files[`${tweakName}/Makefile`] = `export TARGET = iphone:latest:15.0\nexport ARCHS = arm64\n\ninclude $(THEOS)/makefiles/common.mk\n\nTWEAK_NAME = ${tweakName}\n${tweakName}_FILES = Tweak.xm\n${tweakName}_FRAMEWORKS = UIKit StoreKit QuartzCore\n\ninclude $(THEOS)/makefiles/tweak.mk`;
+    files[`${tweakName}/control`] = `Package: com.nexus.${tweakName.toLowerCase()}\nName: ${tweakName}\nVersion: 1.0\nArchitecture: iphoneos-arm64\nDescription: Nexus Mod\nMaintainer: Nexus\nAuthor: Nexus\nSection: Tweaks`;
+    files[`${tweakName}/${tweakName}.plist`] = `<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0">\n<dict>\n    <key>Filter</key>\n    <dict>\n        <key>Bundles</key>\n        <array>\n            <string>com.apple.UIKit</string>\n        </array>\n    </dict>\n</dict>\n</plist>`;
+    files[`${tweakName}/.github/workflows/build.yml`] = `name: Build Tweak\n\non:\n  push:\n  workflow_dispatch:\n\njobs:\n  build:\n    runs-on: macos-latest\n    steps:\n      - uses: actions/checkout@v4\n      - name: Install Theos dependencies\n        run: brew install ldid xz\n      - name: Checkout Theos\n        uses: actions/checkout@v4\n        with:\n          repository: theos/theos\n          path: theos\n          submodules: recursive\n      - name: Setup Theos\n        run: |\n          export THEOS=$(pwd)/theos\n          echo "THEOS=$THEOS" >> $GITHUB_ENV\n          echo "$THEOS/bin" >> $GITHUB_PATH\n      - name: Build Package\n        run: |\n          export THEOS=$(pwd)/theos\n          make package\n      - name: Upload .dylib\n        uses: actions/upload-artifact@v4\n        with:\n          name: ${tweakName}_dylib\n          path: .theos/obj/debug/*.dylib`;
+    return files;
+}
+
+async function uploadToGitHub(token, owner, repo, path, content) {
+    const url = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`;
+    let sha = '';
+    try {
+        const res = await fetch(url, { headers: { 'Authorization': `token ${token}` } });
+        if (res.ok) { const data = await res.json(); sha = data.sha; }
+    } catch(e) {}
+    const body = { message: `Update ${path}`, content: btoa(unescape(encodeURIComponent(content))), branch: 'main' };
+    if (sha) body.sha = sha;
+    const res = await fetch(url, { method: 'PUT', headers: { 'Authorization': `token ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+}
+
+async function triggerWorkflow(token, owner, repo) {
+    const url = `https://api.github.com/repos/${owner}/${repo}/actions/workflows/build.yml/dispatches`;
+    const res = await fetch(url, { method: 'POST', headers: { 'Authorization': `token ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ ref: 'main' }) });
+    return res.ok;
+}
+
+async function startPolling(token, owner, repo, output, progressFill, buildBtn) {
+    if (pollingInterval) clearInterval(pollingInterval);
+    let attempts = 0;
+    const maxAttempts = 60;
+    pollingInterval = setInterval(async () => {
+        attempts++;
+        output.innerHTML = `[STATUS] Compiling... (${attempts * 5}s)`;
+        progressFill.style.width = `${70 + (attempts * 0.5)}%`;
+        const artifactUrl = await getArtifactUrl(token, owner, repo);
+        if (artifactUrl) {
+            clearInterval(pollingInterval);
+            progressFill.style.width = '100%';
+            output.innerHTML = '[SUCCESS] Compilation complete!';
+            const downloadDiv = document.getElementById('downloadSection');
+            const downloadLink = document.getElementById('downloadLink');
+            downloadLink.href = artifactUrl;
+            downloadLink.innerHTML = 'DOWNLOAD DYLIB';
+            downloadDiv.style.display = 'block';
+            buildBtn.disabled = false;
+        }
+        if (attempts >= maxAttempts) {
+            clearInterval(pollingInterval);
+            output.innerHTML = '[TIMEOUT] Check GitHub Actions manually.';
+            buildBtn.disabled = false;
+        }
+    }, 5000);
+}
+
+async function getArtifactUrl(token, owner, repo) {
+    try {
+        const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/actions/artifacts`, { headers: { 'Authorization': `token ${token}` } });
+        const data = await res.json();
+        if (data.artifacts && data.artifacts.length > 0 && !data.artifacts[0].expired) {
+            return data.artifacts[0].archive_download_url;
+        }
+    } catch(e) {}
+    return null;
 }
 </script>
 </body>
