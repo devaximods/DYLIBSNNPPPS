@@ -102,8 +102,8 @@ function updateApiKeyPlaceholder() {
     
     switch(provider) {
         case 'groq':
-            hint.innerHTML = 'Get at console.groq.com (free) - use Llama 3';
-            modelInput.placeholder = 'llama3-70b-8192 (default)';
+            hint.innerHTML = 'Get at console.groq.com (free) - Llama 3.1';
+            modelInput.placeholder = 'llama-3.1-70b-versatile (default)';
             break;
         case 'deepseek':
             hint.innerHTML = 'Get at platform.deepseek.com (add $5 credits)';
@@ -134,11 +134,11 @@ function getApiEndpoint() {
 function getDefaultModel() {
     const provider = document.getElementById('apiProvider').value;
     switch(provider) {
-        case 'groq': return 'llama3-70b-8192';
+        case 'groq': return 'llama-3.1-70b-versatile';
         case 'deepseek': return 'deepseek-chat';
         case 'openai': return 'gpt-3.5-turbo';
         case 'openrouter': return 'openai/gpt-3.5-turbo';
-        default: return 'llama3-70b-8192';
+        default: return 'llama-3.1-70b-versatile';
     }
 }
 
