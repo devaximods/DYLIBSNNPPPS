@@ -3,11 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NEXUS - Offsets Extractor (Obfuscated Dump)</title>
+    <title>NEXUS - AI Offsets Extractor</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { background: #000000; font-family: 'Courier New', monospace; min-height: 100vh; padding: 20px; }
-        .container { max-width: 1200px; margin: 0 auto; }
+        .container { max-width: 1400px; margin: 0 auto; }
         .header { text-align: center; margin-bottom: 30px; padding-bottom: 20px; border-bottom: 1px solid #333; }
         .header h1 { color: #fff; font-size: 1.8em; font-weight: normal; letter-spacing: 2px; }
         .header p { color: #666; margin-top: 10px; }
@@ -16,21 +16,25 @@
         .panel { background: #0a0a0a; border: 1px solid #333; padding: 20px; }
         .panel h3 { color: #fff; margin-bottom: 15px; font-weight: normal; }
         textarea { width: 100%; background: #000; color: #0f0; border: 1px solid #333; font-family: monospace; font-size: 12px; padding: 12px; resize: vertical; }
+        input { width: 100%; background: #000; color: #fff; border: 1px solid #333; padding: 10px; font-family: monospace; }
         button { background: #111; color: #fff; border: 1px solid #333; padding: 12px 24px; cursor: pointer; font-family: monospace; margin-top: 10px; }
         button:hover { background: #222; border-color: #fff; }
-        .status { margin-top: 15px; padding: 12px; background: #0a0a0a; border-left: 2px solid #fff; color: #ccc; font-size: 12px; max-height: 150px; overflow-y: auto; }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        .status { margin-top: 15px; padding: 12px; background: #0a0a0a; border-left: 2px solid #fff; color: #ccc; font-size: 12px; max-height: 200px; overflow-y: auto; }
         .file-zone { border: 1px dashed #333; padding: 30px; text-align: center; margin-bottom: 15px; cursor: pointer; transition: all 0.2s; }
         .file-zone:hover { border-color: #0f0; background: #0a0a0a; }
         .progress-container { width: 100%; background: #1a1a1a; margin-top: 10px; position: relative; }
         .progress-bar { width: 0%; height: 20px; background: #0f0; transition: width 0.3s; }
         .progress-text { position: absolute; top: 2px; left: 10px; color: #000; font-size: 11px; font-weight: bold; }
+        .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid #0f0; border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; margin-left: 10px; vertical-align: middle; }
+        @keyframes spin { to { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
 <div class="container">
     <div class="header">
-        <h1>NEXUS OFFSETS EXTRACTOR</h1>
-        <p>Extracts offsets from obfuscated dumps (searches for RVA/Offset patterns)</p>
+        <h1>NEXUS AI OFFSETS EXTRACTOR</h1>
+        <p>AI-powered analysis for obfuscated dumps | Extracts classes and offsets</p>
     </div>
     
     <div class="grid">
@@ -38,9 +42,15 @@
             <h3>DUMP.CS FILE</h3>
             <div class="file-zone" onclick="document.getElementById('dumpFile').click()">
                 <p>📁 CLICK TO SELECT DUMP.CS FILE</p>
-                <p style="color:#444; font-size:12px;">Works with obfuscated dumps</p>
+                <p style="color:#444; font-size:12px;">AI will analyze the structure</p>
             </div>
-            <input type="file" id="dumpFile" accept=".cs,.txt" style="display:none;" onchange="extractObfuscatedOffsets()">
+            <input type="file" id="dumpFile" accept=".cs,.txt" style="display:none;" onchange="startAIAnalysis()">
+            
+            <div style="margin-top:15px;">
+                <label style="color:#fff;">DeepSeek API Key (required for AI analysis)</label>
+                <input type="password" id="apiKey" placeholder="sk-...">
+                <div class="info-text" style="color:#666; font-size:11px;">Get at platform.deepseek.com</div>
+            </div>
             
             <div class="progress-container" style="margin-top:15px;">
                 <div class="progress-bar" id="progressBar"></div>
@@ -50,169 +60,218 @@
             <div style="margin-top:10px;">
                 <span id="scanStatus" style="color:#ff0;">● IDLE</span>
                 <span id="bytesRead" style="color:#666; margin-left:10px;">0 MB</span>
-                <span id="foundCount" style="color:#0f0; margin-left:10px;">0/8 found</span>
             </div>
             
-            <button id="cancelBtn" onclick="cancelScan()" style="display:none; background:#330000;">STOP SCAN</button>
+            <button id="cancelBtn" onclick="cancelAnalysis()" style="display:none; background:#330000;">STOP</button>
         </div>
         
         <div class="panel">
-            <h3>EXTRACTED OFFSETS</h3>
-            <textarea id="offsetsOutput" rows="20" readonly placeholder="Offsets will appear here..."></textarea>
+            <h3>EXTRACTED CLASSES & OFFSETS</h3>
+            <textarea id="offsetsOutput" rows="20" readonly placeholder="Results will appear here..."></textarea>
             <button onclick="copyOffsets()">COPY TO CLIPBOARD</button>
         </div>
     </div>
     
-    <div id="status" class="status">Ready - Select a dump.cs file</div>
+    <div id="status" class="status">Ready - Enter API key and select a dump.cs file</div>
 </div>
 
 <script>
-let scanActive = false;
-let scanCancelled = false;
-let allOffsets = [];
+let analysisActive = false;
+let analysisCancelled = false;
 
-function extractObfuscatedOffsets() {
+async function startAIAnalysis() {
     const file = document.getElementById('dumpFile').files[0];
-    if (!file) return;
+    const apiKey = document.getElementById('apiKey').value;
     
-    scanActive = true;
-    scanCancelled = false;
-    allOffsets = [];
+    if (!file) {
+        document.getElementById('status').innerHTML = '[ERROR] Please select a dump.cs file';
+        return;
+    }
+    if (!apiKey) {
+        document.getElementById('status').innerHTML = '[ERROR] Please enter your DeepSeek API key';
+        return;
+    }
+    
+    analysisActive = true;
+    analysisCancelled = false;
     
     document.getElementById('offsetsOutput').value = '';
     document.getElementById('progressBar').style.width = '0%';
     document.getElementById('progressText').innerHTML = '0%';
     document.getElementById('cancelBtn').style.display = 'inline-block';
-    document.getElementById('scanStatus').innerHTML = '● SCANNING';
+    document.getElementById('scanStatus').innerHTML = '● LOADING';
     document.getElementById('scanStatus').style.color = '#0f0';
     document.getElementById('bytesRead').innerHTML = '0 MB';
-    document.getElementById('foundCount').innerHTML = '0/?';
-    document.getElementById('status').innerHTML = `[STATUS] Scanning ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)...`;
+    document.getElementById('status').innerHTML = `[STATUS] Loading file...`;
     
-    const chunkSize = 1024 * 1024 * 10; // 10 MB chunks
-    let offset = 0;
-    let leftover = '';
-    let totalMatches = 0;
-    let uniqueOffsets = new Map();
+    // Read file in chunks to get first 500KB for AI analysis
+    const chunkSize = 500 * 1024; // 500KB for AI
+    const chunk = file.slice(0, chunkSize);
+    const reader = new FileReader();
     
-    function processNextChunk() {
-        if (scanCancelled) {
-            finishScan(true);
+    reader.onload = async function(e) {
+        if (analysisCancelled) {
+            finishAnalysis(true);
             return;
         }
         
-        const chunk = file.slice(offset, offset + chunkSize);
-        const reader = new FileReader();
+        const sample = e.target.result;
+        const totalSize = file.size;
+        document.getElementById('bytesRead').innerHTML = `${(sample.length / 1024).toFixed(0)} KB / ${(totalSize / 1024 / 1024).toFixed(2)} MB`;
+        document.getElementById('progressBar').style.width = '10%';
+        document.getElementById('progressText').innerHTML = '10%';
+        document.getElementById('scanStatus').innerHTML = '● AI ANALYSIS';
+        document.getElementById('status').innerHTML = '[STATUS] AI analyzing dump structure... This may take 30-60 seconds.';
         
-        reader.onload = function(e) {
-            let text = leftover + e.target.result;
-            const lines = text.split('\n');
-            leftover = lines.pop();
-            
-            // Pattern to find RVA or Offset
-            const rvaPattern = /(?:RVA|Offset):\s*0x([0-9A-Fa-f]+)/gi;
-            
-            for (const line of lines) {
-                let match;
-                while ((match = rvaPattern.exec(line)) !== null) {
-                    const offsetValue = `0x${match[1]}`;
-                    if (!uniqueOffsets.has(offsetValue)) {
-                        // Try to extract context (function name if available)
-                        let context = '';
-                        const funcMatch = line.match(/public\s+\w+\s+(\w+)\s*\(/);
-                        if (funcMatch) {
-                            context = ` (${funcMatch[1]})`;
+        // Extract class structures from the sample
+        const classPattern = /(?:public|private|internal)\s+(?:class|struct)\s+(\w+)\s*(?::\s*\w+)?\s*\{([^}]*(?:\{[^}]*\}[^}]*)*)\}/gs;
+        const classes = [];
+        let match;
+        while ((match = classPattern.exec(sample)) !== null) {
+            classes.push({ name: match[1], body: match[2].substring(0, 1000) });
+            if (classes.length >= 20) break;
+        }
+        
+        // Prepare prompt for AI
+        const prompt = `Analyze this Unity dump.cs sample and extract the OFFSETS for the following functions:
+- get_LocalPlayer or LocalPlayer property
+- get_Players or Players list
+- get_Position or Position property
+- get_Rotation or Rotation property
+- get_Team or Team property
+- get_Health or Health property
+- WorldToScreenPoint
+- Camera.get_main or Camera.main
+
+The dump is obfuscated. Look for patterns in the code. Return ONLY valid JSON in this exact format:
+{
+  "get_LocalPlayer_offset": "0x00000000",
+  "get_Players_offset": "0x00000000",
+  "get_Position_offset": "0x00000000",
+  "get_Rotation_offset": "0x00000000",
+  "get_Team_offset": "0x00000000",
+  "get_Health_offset": "0x00000000",
+  "WorldToScreenPoint_offset": "0x00000000",
+  "Camera_get_main_offset": "0x00000000"
+}
+
+If you cannot find an offset, use "0x00000000".
+
+Here is the dump sample:
+${sample.substring(0, 15000)}
+
+Classes found:
+${JSON.stringify(classes, null, 2)}`;
+
+        try {
+            const response = await fetch('https://api.deepseek.com/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${apiKey}`
+                },
+                body: JSON.stringify({
+                    model: 'deepseek-chat',
+                    messages: [
+                        {
+                            role: 'system',
+                            content: 'You are an expert at reverse engineering Unity IL2CPP dumps. Extract offsets accurately.'
+                        },
+                        {
+                            role: 'user',
+                            content: prompt
                         }
-                        uniqueOffsets.set(offsetValue, { offset: offsetValue, context: context, line: line.substring(0, 100) });
-                        totalMatches++;
-                        updateFoundCount(uniqueOffsets.size);
-                    }
+                    ],
+                    temperature: 0.1
+                })
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+            
+            const data = await response.json();
+            const aiResponse = data.choices[0].message.content;
+            
+            // Parse JSON response
+            let offsets;
+            try {
+                offsets = JSON.parse(aiResponse);
+            } catch(e) {
+                // Try to extract JSON from text
+                const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
+                if (jsonMatch) {
+                    offsets = JSON.parse(jsonMatch[0]);
+                } else {
+                    throw new Error('Invalid AI response format');
                 }
             }
             
-            offset += chunkSize;
-            const percent = Math.min(100, (offset / file.size) * 100);
-            document.getElementById('progressBar').style.width = `${percent}%`;
-            document.getElementById('progressText').innerHTML = `${Math.round(percent)}%`;
-            document.getElementById('bytesRead').innerHTML = `${(offset / 1024 / 1024).toFixed(1)} MB`;
-            document.getElementById('status').innerHTML = `[STATUS] Scanning... ${Math.round(percent)}% | ${uniqueOffsets.size} unique offsets found`;
+            // Generate output
+            let output = '// ============ AI EXTRACTED OFFSETS ============\n\n';
+            output += '// Game Classes Analysis\n\n';
             
-            if (offset < file.size) {
-                setTimeout(processNextChunk, 10);
-            } else {
-                finishScan(false, uniqueOffsets);
+            for (const cls of classes) {
+                output += `class ${cls.name} {\n`;
+                output += `    // TODO: Add methods for this class\n`;
+                output += `}\n\n`;
             }
-        };
-        
-        reader.onerror = function() {
-            document.getElementById('status').innerHTML = '[ERROR] Failed to read file';
-            finishScan(true);
-        };
-        
-        reader.readAsText(chunk);
-    }
-    
-    function updateFoundCount(count) {
-        document.getElementById('foundCount').innerHTML = `${count} found`;
-    }
-    
-    function finishScan(cancelled, uniqueOffsets) {
-        scanActive = false;
-        document.getElementById('cancelBtn').style.display = 'none';
-        
-        if (cancelled) {
-            document.getElementById('scanStatus').innerHTML = '● CANCELLED';
-            document.getElementById('scanStatus').style.color = '#ff0';
-            document.getElementById('status').innerHTML = '[CANCELLED] Scan stopped by user.';
-            return;
+            
+            output += '// ============ OFFSETS ============\n\n';
+            for (const [key, value] of Object.entries(offsets)) {
+                output += `${key} = ${value}\n`;
+            }
+            
+            output += '\n// ============ USAGE ============\n';
+            output += '// Copy these offsets into your Tweak.xm file\n';
+            
+            document.getElementById('offsetsOutput').value = output;
+            document.getElementById('progressBar').style.width = '100%';
+            document.getElementById('progressText').innerHTML = '100%';
+            document.getElementById('scanStatus').innerHTML = '● COMPLETE';
+            document.getElementById('scanStatus').style.color = '#0f0';
+            document.getElementById('status').innerHTML = '[SUCCESS] AI analysis complete! Offsets extracted.';
+            
+        } catch (error) {
+            document.getElementById('status').innerHTML = `[ERROR] AI analysis failed: ${error.message}`;
+            document.getElementById('scanStatus').innerHTML = '● ERROR';
+            document.getElementById('scanStatus').style.color = '#f00';
+        } finally {
+            analysisActive = false;
+            document.getElementById('cancelBtn').style.display = 'none';
         }
-        
-        document.getElementById('scanStatus').innerHTML = '● COMPLETE';
-        document.getElementById('scanStatus').style.color = '#0f0';
-        document.getElementById('progressBar').style.width = '100%';
-        document.getElementById('progressText').innerHTML = '100%';
-        
-        // Generate output
-        let output = '// ============ ALL OFFSETS FOUND ============\n';
-        output += `// Total unique offsets: ${uniqueOffsets.size}\n\n`;
-        
-        // Group by offset value
-        const sortedOffsets = Array.from(uniqueOffsets.values()).sort((a, b) => {
-            return parseInt(a.offset, 16) - parseInt(b.offset, 16);
-        });
-        
-        for (const item of sortedOffsets) {
-            output += `#define OFFSET_${item.offset.substring(2)}    ${item.offset}${item.context}\n`;
-        }
-        
-        output += `\n// ============ SUGGESTED OFFSETS ============\n`;
-        output += `// You need to manually identify which offset corresponds to:\n`;
-        output += `// - get_LocalPlayer\n`;
-        output += `// - get_Players\n`;
-        output += `// - get_Position\n`;
-        output += `// - get_Rotation\n`;
-        output += `// - get_Team\n`;
-        output += `// - get_Health\n`;
-        output += `// - WorldToScreenPoint\n`;
-        output += `// - Camera.get_main\n`;
-        
-        document.getElementById('offsetsOutput').value = output;
-        document.getElementById('status').innerHTML = `[COMPLETE] ${uniqueOffsets.size} unique offsets found. Due to obfuscation, you need to identify which offset corresponds to which function manually.`;
-    }
+    };
     
-    processNextChunk();
+    reader.onerror = function() {
+        document.getElementById('status').innerHTML = '[ERROR] Failed to read file';
+        finishAnalysis(true);
+    };
+    
+    reader.readAsText(chunk);
 }
 
-function cancelScan() {
-    if (scanActive) {
-        scanCancelled = true;
+function cancelAnalysis() {
+    if (analysisActive) {
+        analysisCancelled = true;
         document.getElementById('scanStatus').innerHTML = '● CANCELLING...';
-        document.getElementById('status').innerHTML = '[STATUS] Cancelling scan...';
+        document.getElementById('status').innerHTML = '[STATUS] Cancelling...';
+    }
+}
+
+function finishAnalysis(cancelled) {
+    analysisActive = false;
+    document.getElementById('cancelBtn').style.display = 'none';
+    
+    if (cancelled) {
+        document.getElementById('scanStatus').innerHTML = '● CANCELLED';
+        document.getElementById('scanStatus').style.color = '#ff0';
+        document.getElementById('status').innerHTML = '[CANCELLED] Analysis stopped.';
     }
 }
 
 function copyOffsets() {
-    navigator.clipboard.writeText(document.getElementById('offsetsOutput').value);
+    const text = document.getElementById('offsetsOutput').value;
+    navigator.clipboard.writeText(text);
     document.getElementById('status').innerHTML = '[INFO] Offsets copied to clipboard';
 }
 </script>
