@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NEXUS - AI Offsets Extractor</title>
+    <title>NEXUS - Offsets Extractor (Local)</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { background: #000000; font-family: 'Courier New', monospace; min-height: 100vh; padding: 20px; }
@@ -16,7 +16,6 @@
         .panel { background: #0a0a0a; border: 1px solid #333; padding: 20px; }
         .panel h3 { color: #fff; margin-bottom: 15px; font-weight: normal; }
         textarea { width: 100%; background: #000; color: #0f0; border: 1px solid #333; font-family: monospace; font-size: 12px; padding: 12px; resize: vertical; }
-        input, select { width: 100%; background: #000; color: #fff; border: 1px solid #333; padding: 10px; font-family: monospace; }
         button { background: #111; color: #fff; border: 1px solid #333; padding: 12px 24px; cursor: pointer; font-family: monospace; margin-top: 10px; }
         button:hover { background: #222; border-color: #fff; }
         button:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -26,15 +25,13 @@
         .progress-container { width: 100%; background: #1a1a1a; margin-top: 10px; position: relative; }
         .progress-bar { width: 0%; height: 20px; background: #0f0; transition: width 0.3s; }
         .progress-text { position: absolute; top: 2px; left: 10px; color: #000; font-size: 11px; font-weight: bold; }
-        .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid #0f0; border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; margin-left: 10px; vertical-align: middle; }
-        @keyframes spin { to { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
 <div class="container">
     <div class="header">
-        <h1>NEXUS AI OFFSETS EXTRACTOR</h1>
-        <p>AI-powered analysis for obfuscated dumps | Choose your API provider</p>
+        <h1>NEXUS OFFSETS EXTRACTOR</h1>
+        <p>Extract offsets from dump.cs - No API required, works locally</p>
     </div>
     
     <div class="grid">
@@ -42,30 +39,9 @@
             <h3>DUMP.CS FILE</h3>
             <div class="file-zone" onclick="document.getElementById('dumpFile').click()">
                 <p>📁 CLICK TO SELECT DUMP.CS FILE</p>
-                <p style="color:#444; font-size:12px;">Upload your obfuscated dump</p>
+                <p style="color:#444; font-size:12px;">Any file size - processes locally</p>
             </div>
-            <input type="file" id="dumpFile" accept=".cs,.txt" style="display:none;">
-            
-            <div style="margin-top:15px;">
-                <label style="color:#fff;">API Provider</label>
-                <select id="apiProvider" onchange="updateApiKeyPlaceholder()">
-                    <option value="groq">Groq (Llama 3 - free)</option>
-                    <option value="deepseek">DeepSeek (recommended)</option>
-                    <option value="openai">OpenAI (GPT-3.5/4)</option>
-                    <option value="openrouter">OpenRouter (multiple models)</option>
-                </select>
-            </div>
-            
-            <div style="margin-top:10px;">
-                <label style="color:#fff;">API Key</label>
-                <input type="password" id="apiKey" placeholder="...">
-                <div class="info-text" style="color:#666; font-size:11px;" id="apiHint">Get at console.groq.com (free)</div>
-            </div>
-            
-            <div style="margin-top:10px;">
-                <label style="color:#fff;">Model (optional)</label>
-                <input type="text" id="model" placeholder="Leave empty for default">
-            </div>
+            <input type="file" id="dumpFile" accept=".cs,.txt" style="display:none;" onchange="extractOffsets()">
             
             <div class="progress-container" style="margin-top:15px;">
                 <div class="progress-bar" id="progressBar"></div>
@@ -75,292 +51,175 @@
             <div style="margin-top:10px;">
                 <span id="scanStatus" style="color:#ff0;">● IDLE</span>
                 <span id="bytesRead" style="color:#666; margin-left:10px;">0 MB</span>
+                <span id="foundCount" style="color:#0f0; margin-left:10px;">0/8 found</span>
             </div>
-            
-            <button onclick="startAIAnalysis()">EXTRACT WITH AI</button>
-            <button onclick="cancelAnalysis()" id="cancelBtn" style="display:none; background:#330000;">CANCEL</button>
         </div>
         
         <div class="panel">
-            <h3>EXTRACTED CLASSES & OFFSETS</h3>
-            <textarea id="offsetsOutput" rows="20" readonly placeholder="Results will appear here..."></textarea>
+            <h3>EXTRACTED OFFSETS</h3>
+            <textarea id="offsetsOutput" rows="20" readonly placeholder="Offsets will appear here..."></textarea>
             <button onclick="copyOffsets()">COPY TO CLIPBOARD</button>
         </div>
     </div>
     
-    <div id="status" class="status">Ready - Select API provider, enter API key, and upload a dump.cs file</div>
+    <div id="status" class="status">Ready - Select a dump.cs file</div>
 </div>
 
 <script>
-let analysisActive = false;
-let analysisCancelled = false;
+let scanActive = false;
+let scanCancelled = false;
+let foundOffsets = {};
 
-function updateApiKeyPlaceholder() {
-    const provider = document.getElementById('apiProvider').value;
-    const hint = document.getElementById('apiHint');
-    const modelInput = document.getElementById('model');
-    
-    switch(provider) {
-        case 'groq':
-            hint.innerHTML = 'Get at console.groq.com (free) - Llama 3.1';
-            modelInput.placeholder = 'llama-3.1-70b-versatile (default)';
-            break;
-        case 'deepseek':
-            hint.innerHTML = 'Get at platform.deepseek.com (add $5 credits)';
-            modelInput.placeholder = 'deepseek-chat (default)';
-            break;
-        case 'openai':
-            hint.innerHTML = 'Get at platform.openai.com/api-keys';
-            modelInput.placeholder = 'gpt-3.5-turbo (default)';
-            break;
-        case 'openrouter':
-            hint.innerHTML = 'Get at openrouter.io/keys';
-            modelInput.placeholder = 'openai/gpt-3.5-turbo (default)';
-            break;
-    }
-}
+const searchFunctions = [
+    { name: 'get_LocalPlayer', keywords: ['get_LocalPlayer', 'GetLocalPlayer', 'LocalPlayer', 'localPlayer'] },
+    { name: 'get_Players', keywords: ['get_Players', 'GetPlayers', 'getPlayers', 'Players', 'playerList'] },
+    { name: 'get_Position', keywords: ['get_Position', 'GetPosition', 'position', 'Position', 'get_pos'] },
+    { name: 'get_Rotation', keywords: ['get_Rotation', 'GetRotation', 'rotation', 'Rotation', 'get_rot'] },
+    { name: 'get_Team', keywords: ['get_Team', 'GetTeam', 'team', 'Team', 'teamId', 'TeamId'] },
+    { name: 'get_Health', keywords: ['get_Health', 'GetHealth', 'health', 'Health', 'currentHealth'] },
+    { name: 'WorldToScreenPoint', keywords: ['WorldToScreenPoint', 'WorldToScreen', 'worldToScreen'] },
+    { name: 'Camera_get_main', keywords: ['get_main', 'GetMain', 'mainCamera', 'Camera.main'] }
+];
 
-function getApiEndpoint() {
-    const provider = document.getElementById('apiProvider').value;
-    switch(provider) {
-        case 'deepseek': return 'https://api.deepseek.com/v1/chat/completions';
-        case 'openai': return 'https://api.openai.com/v1/chat/completions';
-        case 'groq': return 'https://api.groq.com/openai/v1/chat/completions';
-        case 'openrouter': return 'https://openrouter.ai/api/v1/chat/completions';
-        default: return 'https://api.groq.com/openai/v1/chat/completions';
-    }
-}
-
-function getDefaultModel() {
-    const provider = document.getElementById('apiProvider').value;
-    switch(provider) {
-        case 'groq': return 'llama-3.1-70b-versatile';
-        case 'deepseek': return 'deepseek-chat';
-        case 'openai': return 'gpt-3.5-turbo';
-        case 'openrouter': return 'openai/gpt-3.5-turbo';
-        default: return 'llama-3.1-70b-versatile';
-    }
-}
-
-async function startAIAnalysis() {
+function extractOffsets() {
     const file = document.getElementById('dumpFile').files[0];
-    const apiKey = document.getElementById('apiKey').value;
-    const provider = document.getElementById('apiProvider').value;
-    let model = document.getElementById('model').value;
+    if (!file) return;
     
-    if (!file) {
-        document.getElementById('status').innerHTML = '[ERROR] Please select a dump.cs file';
-        return;
+    scanActive = true;
+    scanCancelled = false;
+    
+    for (let f of searchFunctions) {
+        foundOffsets[f.name] = null;
     }
-    if (!apiKey) {
-        document.getElementById('status').innerHTML = '[ERROR] Please enter your API key';
-        return;
-    }
-    
-    if (!model) model = getDefaultModel();
-    
-    analysisActive = true;
-    analysisCancelled = false;
     
     document.getElementById('offsetsOutput').value = '';
     document.getElementById('progressBar').style.width = '0%';
     document.getElementById('progressText').innerHTML = '0%';
-    document.getElementById('cancelBtn').style.display = 'inline-block';
-    document.getElementById('scanStatus').innerHTML = '● LOADING';
+    document.getElementById('scanStatus').innerHTML = '● SCANNING';
     document.getElementById('scanStatus').style.color = '#0f0';
     document.getElementById('bytesRead').innerHTML = '0 MB';
-    document.getElementById('status').innerHTML = `[STATUS] Loading file...`;
+    document.getElementById('foundCount').innerHTML = '0/8 found';
+    document.getElementById('status').innerHTML = `[STATUS] Scanning ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)...`;
     
-    // Read first 150KB for AI (to avoid token limits)
-    const chunkSize = 150 * 1024;
-    const chunk = file.slice(0, chunkSize);
-    const reader = new FileReader();
+    const chunkSize = 1024 * 1024 * 5; // 5 MB chunks
+    let offset = 0;
+    let leftover = '';
+    let totalProcessed = 0;
     
-    reader.onload = async function(e) {
-        if (analysisCancelled) {
-            finishAnalysis(true);
+    function processNextChunk() {
+        if (scanCancelled) {
+            finishScan(true);
             return;
         }
         
-        const sample = e.target.result;
-        const totalSize = file.size;
-        document.getElementById('bytesRead').innerHTML = `${(sample.length / 1024).toFixed(0)} KB / ${(totalSize / 1024 / 1024).toFixed(2)} MB`;
-        document.getElementById('progressBar').style.width = '20%';
-        document.getElementById('progressText').innerHTML = '20%';
-        document.getElementById('scanStatus').innerHTML = '● AI ANALYSIS';
-        document.getElementById('status').innerHTML = '[STATUS] AI analyzing dump structure... This may take 20-40 seconds.';
+        const chunk = file.slice(offset, offset + chunkSize);
+        const reader = new FileReader();
         
-        // Extract class names from sample
-        const classPattern = /(?:public|private|internal)\s+(?:class|struct)\s+([A-Za-z_][A-Za-z0-9_]+)/g;
-        const classes = [];
-        let match;
-        while ((match = classPattern.exec(sample)) !== null) {
-            if (!classes.includes(match[1]) && !match[1].startsWith('<')) {
-                classes.push(match[1]);
-            }
-            if (classes.length >= 30) break;
-        }
-        
-        const prompt = `Analyze this Unity IL2CPP dump.cs sample and extract the OFFSETS for these 8 critical functions:
-1. get_LocalPlayer - returns the local player object
-2. get_Players - returns a list/array of all players
-3. get_Position - returns Vector3 position
-4. get_Rotation - returns Quaternion rotation
-5. get_Team - returns team ID (int/byte)
-6. get_Health - returns current health (float/int)
-7. WorldToScreenPoint - converts 3D to 2D screen coordinates
-8. Camera.get_main - returns the main camera
-
-The dump may be obfuscated. Look for RVA or Offset: 0x... patterns near these functions.
-Return ONLY valid JSON in this exact format:
-{
-  "get_LocalPlayer_offset": "0x00000000",
-  "get_Players_offset": "0x00000000",
-  "get_Position_offset": "0x00000000",
-  "get_Rotation_offset": "0x00000000",
-  "get_Team_offset": "0x00000000",
-  "get_Health_offset": "0x00000000",
-  "WorldToScreenPoint_offset": "0x00000000",
-  "Camera_get_main_offset": "0x00000000"
-}
-
-If you cannot find an offset, use "0x00000000".
-
-Classes found in this dump: ${classes.join(', ')}
-
-Dump sample (first 25000 chars):
-${sample.substring(0, 25000)}`;
-
-        try {
-            const apiUrl = getApiEndpoint();
-            const headers = {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${apiKey}`
-            };
+        reader.onload = function(e) {
+            let text = leftover + e.target.result;
+            const lines = text.split('\n');
+            leftover = lines.pop();
             
-            if (provider === 'openrouter') {
-                headers['HTTP-Referer'] = window.location.href;
-                headers['X-Title'] = 'Nexus Offsets Extractor';
-            }
-            
-            const response = await fetch(apiUrl, {
-                method: 'POST',
-                headers: headers,
-                body: JSON.stringify({
-                    model: model,
-                    messages: [
-                        {
-                            role: 'system',
-                            content: 'You are an expert at reverse engineering Unity IL2CPP dumps. Extract offsets accurately. Return ONLY valid JSON.'
-                        },
-                        {
-                            role: 'user',
-                            content: prompt
+            for (const line of lines) {
+                const rvaMatch = line.match(/(?:RVA|Offset):\s*0x([0-9A-Fa-f]+)/i);
+                if (rvaMatch) {
+                    const offsetValue = `0x${rvaMatch[1]}`;
+                    
+                    for (const func of searchFunctions) {
+                        if (foundOffsets[func.name] === null) {
+                            for (const keyword of func.keywords) {
+                                if (line.toLowerCase().includes(keyword.toLowerCase())) {
+                                    foundOffsets[func.name] = offsetValue;
+                                    updateDisplay();
+                                    break;
+                                }
+                            }
                         }
-                    ],
-                    temperature: 0.1,
-                    max_tokens: 1000
-                })
-            });
-            
-            if (!response.ok) {
-                const errorText = await response.text();
-                if (response.status === 401) {
-                    throw new Error('Invalid API key');
-                } else if (response.status === 402) {
-                    throw new Error('Insufficient credits. Use Groq (free) or add credits');
-                } else if (response.status === 429) {
-                    throw new Error('Rate limit exceeded. Try again in a few seconds');
-                } else {
-                    throw new Error(`HTTP ${response.status}: ${errorText.substring(0, 150)}`);
+                    }
                 }
             }
             
-            const data = await response.json();
-            const aiResponse = data.choices[0].message.content;
+            offset += chunkSize;
+            const percent = Math.min(100, (offset / file.size) * 100);
+            document.getElementById('progressBar').style.width = `${percent}%`;
+            document.getElementById('progressText').innerHTML = `${Math.round(percent)}%`;
+            document.getElementById('bytesRead').innerHTML = `${(offset / 1024 / 1024).toFixed(1)} MB`;
             
-            // Parse JSON response
-            let offsets;
-            try {
-                offsets = JSON.parse(aiResponse);
-            } catch(e) {
-                const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
-                if (jsonMatch) {
-                    offsets = JSON.parse(jsonMatch[0]);
-                } else {
-                    throw new Error('Invalid AI response format');
+            if (offset < file.size) {
+                setTimeout(processNextChunk, 10);
+            } else {
+                if (leftover.trim()) {
+                    const rvaMatch = leftover.match(/(?:RVA|Offset):\s*0x([0-9A-Fa-f]+)/i);
+                    if (rvaMatch) {
+                        const offsetValue = `0x${rvaMatch[1]}`;
+                        for (const func of searchFunctions) {
+                            if (foundOffsets[func.name] === null) {
+                                for (const keyword of func.keywords) {
+                                    if (leftover.toLowerCase().includes(keyword.toLowerCase())) {
+                                        foundOffsets[func.name] = offsetValue;
+                                        updateDisplay();
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
+                finishScan(false);
             }
-            
-            // Generate output
-            let output = '// ============ AI EXTRACTED OFFSETS ============\n\n';
-            output += `// Provider: ${provider}\n`;
-            output += `// Model: ${model}\n`;
-            output += `// File: ${file.name}\n\n`;
-            
-            output += '// Classes detected in dump:\n';
-            for (const cls of classes.slice(0, 20)) {
-                output += `// - ${cls}\n`;
+        };
+        
+        reader.onerror = function() {
+            document.getElementById('status').innerHTML = '[ERROR] Failed to read file';
+            finishScan(true);
+        };
+        
+        reader.readAsText(chunk);
+    }
+    
+    function updateDisplay() {
+        let output = '// ============ EXTRACTED OFFSETS ============\n\n';
+        let found = 0;
+        for (const [name, offset] of Object.entries(foundOffsets)) {
+            if (offset !== null) {
+                found++;
+                output += `${name}_offset = ${offset}\n`;
+            } else {
+                output += `${name}_offset = 0x00000000 // NOT FOUND\n`;
             }
-            output += '\n// ============ OFFSETS ============\n\n';
-            
-            let foundCount = 0;
-            for (const [key, value] of Object.entries(offsets)) {
-                if (value !== '0x00000000') foundCount++;
-                output += `${key} = ${value}\n`;
-            }
-            
-            output += `\n// ${foundCount}/8 offsets found\n`;
-            output += '\n// ============ USAGE ============\n';
-            output += '// Copy these offsets into your Tweak.xm file\n';
-            
-            document.getElementById('offsetsOutput').value = output;
-            document.getElementById('progressBar').style.width = '100%';
-            document.getElementById('progressText').innerHTML = '100%';
+        }
+        output += `\n// ${found}/8 offsets found\n`;
+        document.getElementById('offsetsOutput').value = output;
+        document.getElementById('foundCount').innerHTML = `${found}/8 found`;
+    }
+    
+    function finishScan(cancelled) {
+        scanActive = false;
+        const found = Object.values(foundOffsets).filter(v => v !== null).length;
+        
+        if (cancelled) {
+            document.getElementById('scanStatus').innerHTML = '● CANCELLED';
+            document.getElementById('scanStatus').style.color = '#ff0';
+            document.getElementById('status').innerHTML = '[CANCELLED] Scan stopped.';
+        } else {
             document.getElementById('scanStatus').innerHTML = '● COMPLETE';
             document.getElementById('scanStatus').style.color = '#0f0';
-            document.getElementById('status').innerHTML = `[SUCCESS] AI analysis complete! ${foundCount}/8 offsets found.`;
+            document.getElementById('progressBar').style.width = '100%';
+            document.getElementById('progressText').innerHTML = '100%';
             
-        } catch (error) {
-            document.getElementById('status').innerHTML = `[ERROR] ${error.message}`;
-            document.getElementById('scanStatus').innerHTML = '● ERROR';
-            document.getElementById('scanStatus').style.color = '#f00';
-        } finally {
-            analysisActive = false;
-            document.getElementById('cancelBtn').style.display = 'none';
+            if (found === 0) {
+                document.getElementById('status').innerHTML = '[WARNING] No offsets found. The dump may be heavily obfuscated.';
+            } else {
+                document.getElementById('status').innerHTML = `[COMPLETE] ${found}/8 offsets found.`;
+            }
         }
-    };
-    
-    reader.onerror = function() {
-        document.getElementById('status').innerHTML = '[ERROR] Failed to read file';
-        finishAnalysis(true);
-    };
-    
-    reader.readAsText(chunk);
-}
-
-function cancelAnalysis() {
-    if (analysisActive) {
-        analysisCancelled = true;
-        document.getElementById('scanStatus').innerHTML = '● CANCELLING...';
-        document.getElementById('status').innerHTML = '[STATUS] Cancelling...';
     }
-}
-
-function finishAnalysis(cancelled) {
-    analysisActive = false;
-    document.getElementById('cancelBtn').style.display = 'none';
     
-    if (cancelled) {
-        document.getElementById('scanStatus').innerHTML = '● CANCELLED';
-        document.getElementById('scanStatus').style.color = '#ff0';
-        document.getElementById('status').innerHTML = '[CANCELLED] Analysis stopped.';
-    }
+    processNextChunk();
 }
 
 function copyOffsets() {
-    const text = document.getElementById('offsetsOutput').value;
-    navigator.clipboard.writeText(text);
+    navigator.clipboard.writeText(document.getElementById('offsetsOutput').value);
     document.getElementById('status').innerHTML = '[INFO] Offsets copied to clipboard';
 }
 </script>
