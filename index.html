@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NEXUS - Smart Offsets Extractor</title>
+    <title>NEXUS - Dump Searcher</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { background: #000000; font-family: 'Courier New', monospace; min-height: 100vh; padding: 20px; }
@@ -23,28 +23,21 @@
         .progress-container { width: 100%; background: #1a1a1a; margin-top: 10px; position: relative; }
         .progress-bar { width: 0%; height: 20px; background: #0f0; transition: width 0.3s; }
         .progress-text { position: absolute; top: 2px; left: 10px; color: #000; font-size: 11px; font-weight: bold; }
-        .offset-card { background: #0a0a0a; border: 1px solid #333; margin-bottom: 8px; padding: 10px; cursor: pointer; transition: all 0.2s; }
-        .offset-card:hover { background: #1a1a1a; border-color: #0f0; }
-        .offset-card.selected { background: #0a3a0a; border-color: #0f0; }
-        .offset-addr { color: #0f0; font-weight: bold; font-size: 12px; }
-        .offset-context { color: #ccc; font-size: 10px; margin-top: 5px; font-family: monospace; word-break: break-all; }
-        .offset-class { color: #ff0; font-size: 10px; margin-top: 3px; }
-        .offsets-list { max-height: 500px; overflow-y: auto; }
-        .pagination { display: flex; gap: 10px; margin-top: 15px; justify-content: center; flex-wrap: wrap; }
-        .page-btn { background: #111; color: #fff; border: 1px solid #333; padding: 5px 12px; cursor: pointer; font-size: 12px; }
-        .page-btn.active { background: #0f0; color: #000; border-color: #0f0; }
-        .suggestions { background: #0a0a0a; border: 1px solid #333; padding: 10px; margin-top: 15px; max-height: 300px; overflow-y: auto; }
-        .suggestion-item { padding: 8px; border-bottom: 1px solid #333; cursor: pointer; }
-        .suggestion-item:hover { background: #1a1a1a; }
-        .suggestion-label { color: #0f0; font-weight: bold; }
-        hr { border-color: #333; margin: 15px 0; }
+        .search-box { width: 100%; padding: 10px; background: #000; color: #0f0; border: 1px solid #333; font-family: monospace; font-size: 14px; margin-bottom: 15px; }
+        .results-list { max-height: 500px; overflow-y: auto; background: #000; border: 1px solid #333; }
+        .result-line { padding: 8px; border-bottom: 1px solid #333; font-family: monospace; font-size: 11px; cursor: pointer; }
+        .result-line:hover { background: #1a1a1a; }
+        .result-line.selected { background: #0a3a0a; border-left: 2px solid #0f0; }
+        .result-addr { color: #0f0; font-weight: bold; }
+        .offset-badge { background: #0a0a0a; border: 1px solid #333; padding: 2px 6px; font-size: 10px; color: #ff0; margin-left: 5px; }
+        .selected-panel { background: #0a0a0a; border: 1px solid #333; padding: 15px; margin-top: 15px; max-height: 300px; overflow-y: auto; }
     </style>
 </head>
 <body>
 <div class="container">
     <div class="header">
-        <h1>NEXUS SMART OFFSETS EXTRACTOR</h1>
-        <p>Extracts offsets + Smart Guess to auto-detect important functions</p>
+        <h1>NEXUS DUMP SEARCHER</h1>
+        <p>Search through your dump lines in real-time | Type to filter</p>
     </div>
     
     <div class="grid">
@@ -53,7 +46,7 @@
             <div class="file-zone" onclick="document.getElementById('dumpFile').click()">
                 <p>📁 CLICK TO SELECT DUMP.CS FILE</p>
             </div>
-            <input type="file" id="dumpFile" accept=".cs,.txt" style="display:none;" onchange="extractOffsets()">
+            <input type="file" id="dumpFile" accept=".cs,.txt" style="display:none;" onchange="loadDump()">
             
             <div class="progress-container" style="margin-top:15px;">
                 <div class="progress-bar" id="progressBar"></div>
@@ -63,70 +56,64 @@
             <div style="margin-top:10px;">
                 <span id="scanStatus" style="color:#ff0;">● IDLE</span>
                 <span id="bytesRead" style="color:#666; margin-left:10px;">0 MB</span>
-                <span id="foundCount" style="color:#0f0; margin-left:10px;">0 offsets</span>
+                <span id="lineCount" style="color:#0f0; margin-left:10px;">0 lines</span>
             </div>
-            
-            <button onclick="smartGuess()" id="smartBtn" style="background:#0a0; color:#000;" disabled>🔍 SMART GUESS (Auto-detect)</button>
         </div>
         
         <div class="panel">
-            <h3>OFFSETS (click to select)</h3>
-            <div id="offsetsList" class="offsets-list" style="height: 350px; overflow-y: auto; background: #000; border: 1px solid #333;">
-                <p style="color:#666; padding:20px; text-align:center;">Select a dump.cs file</p>
+            <h3>🔍 SEARCH LINES</h3>
+            <input type="text" id="searchInput" class="search-box" placeholder="Type to search... (ex: get_, Vector3, Player, 0x)" oninput="filterLines()">
+            <div id="resultsList" class="results-list" style="height: 400px;">
+                <p style="color:#666; padding:20px; text-align:center;">Load a dump.cs file first</p>
             </div>
-            <div id="pagination" class="pagination"></div>
-            <div>
-                <button onclick="generateSelectedOffsets()">GENERATE SELECTED</button>
-                <button onclick="selectAllOnPage()">SELECT ALL ON PAGE</button>
+            <div style="margin-top:10px;">
+                <span id="resultCount" style="color:#666;">0 lines</span>
+                <button onclick="selectAllFiltered()">SELECT ALL FILTERED</button>
                 <button onclick="clearSelection()">CLEAR SELECTION</button>
+                <button onclick="generateOffsets()">GENERATE OFFSETS</button>
             </div>
         </div>
     </div>
     
-    <div id="status" class="status">Ready - Select a dump.cs file</div>
-    <div id="suggestionsPanel" style="display:none;">
-        <hr>
-        <h3 style="color:#0f0;">🔍 SMART GUESS RESULTS</h3>
-        <div id="suggestionsList" class="suggestions"></div>
-        <button onclick="applySuggestedOffsets()">APPLY ALL SUGGESTIONS</button>
+    <div id="selectedPanel" class="selected-panel" style="display:none;">
+        <h3 style="color:#0f0;">📋 SELECTED LINES</h3>
+        <div id="selectedList"></div>
+        <button onclick="copySelectedToClipboard()">COPY SELECTED TO CLIPBOARD</button>
     </div>
+    
     <textarea id="outputOffsets" rows="6" readonly placeholder="Generated offsets will appear here..." style="margin-top:15px; width:100%; background:#000; color:#0f0; border:1px solid #333; padding:10px; font-family:monospace;"></textarea>
 </div>
 
 <script>
-let allOffsets = [];
-let selectedOffsets = new Set();
-let currentPage = 1;
-let itemsPerPage = 100;
-let totalPages = 1;
-let suggestions = {};
+let allLines = [];
+let filteredLines = [];
+let selectedIndices = new Set();
+let currentFile = null;
 
-function extractOffsets() {
+function loadDump() {
     const file = document.getElementById('dumpFile').files[0];
     if (!file) return;
     
-    allOffsets = [];
-    selectedOffsets.clear();
-    suggestions = {};
-    document.getElementById('suggestionsPanel').style.display = 'none';
-    document.getElementById('smartBtn').disabled = true;
+    currentFile = file;
+    allLines = [];
+    filteredLines = [];
+    selectedIndices.clear();
     
-    document.getElementById('offsetsList').innerHTML = '<p style="color:#666; padding:20px; text-align:center;">Scanning...</p>';
-    document.getElementById('pagination').innerHTML = '';
+    document.getElementById('resultsList').innerHTML = '<p style="color:#666; padding:20px; text-align:center;">Loading...</p>';
+    document.getElementById('searchInput').value = '';
     document.getElementById('outputOffsets').value = '';
+    document.getElementById('selectedPanel').style.display = 'none';
     document.getElementById('progressBar').style.width = '0%';
     document.getElementById('progressText').innerHTML = '0%';
-    document.getElementById('scanStatus').innerHTML = '● SCANNING';
+    document.getElementById('scanStatus').innerHTML = '● LOADING';
     document.getElementById('bytesRead').innerHTML = '0 MB';
-    document.getElementById('foundCount').innerHTML = '0 offsets';
-    document.getElementById('status').innerHTML = `[STATUS] Scanning ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)...`;
+    document.getElementById('lineCount').innerHTML = '0 lines';
+    document.getElementById('status').innerHTML = `[STATUS] Loading ${file.name}...`;
     
-    const chunkSize = 1024 * 1024 * 2;
+    const chunkSize = 1024 * 1024 * 5;
     let offset = 0;
     let leftover = '';
-    let lineNumber = 0;
-    let allLines = [];
-    let uniqueMap = new Map();
+    let totalLines = 0;
     
     function processNextChunk() {
         const chunk = file.slice(offset, offset + chunkSize);
@@ -139,37 +126,7 @@ function extractOffsets() {
             
             for (const line of lines) {
                 allLines.push(line);
-                lineNumber++;
-                
-                const rvaMatch = line.match(/(?:RVA|Offset):\s*0x([0-9A-Fa-f]+)/i);
-                if (rvaMatch) {
-                    const offsetValue = `0x${rvaMatch[1]}`;
-                    if (!uniqueMap.has(offsetValue)) {
-                        const prevLine = allLines.length > 1 ? allLines[allLines.length - 2] : '';
-                        const nextLine = lines.length > 0 ? lines[0] : '';
-                        
-                        let className = '';
-                        const classMatch = prevLine.match(/(?:public|private|internal)\s+(?:class|struct)\s+(\w+)/);
-                        if (classMatch) className = classMatch[1];
-                        
-                        let funcName = '';
-                        const funcMatch = line.match(/public\s+\w+\s+(\w+)\s*\(/);
-                        if (funcMatch) funcName = funcMatch[1];
-                        
-                        let returnType = '';
-                        const returnMatch = line.match(/public\s+(\w+(?:<[^>]+>)?)\s+\w+\s*\(/);
-                        if (returnMatch) returnType = returnMatch[1];
-                        
-                        uniqueMap.set(offsetValue, {
-                            addr: offsetValue,
-                            className: className,
-                            funcName: funcName,
-                            returnType: returnType,
-                            line: line.substring(0, 300),
-                            prevLine: prevLine.substring(0, 200)
-                        });
-                    }
-                }
+                totalLines++;
             }
             
             offset += chunkSize;
@@ -177,22 +134,19 @@ function extractOffsets() {
             document.getElementById('progressBar').style.width = `${percent}%`;
             document.getElementById('progressText').innerHTML = `${Math.round(percent)}%`;
             document.getElementById('bytesRead').innerHTML = `${(offset / 1024 / 1024).toFixed(1)} MB`;
-            document.getElementById('foundCount').innerHTML = `${uniqueMap.size} offsets`;
-            document.getElementById('status').innerHTML = `[STATUS] Scanning... ${Math.round(percent)}% | ${uniqueMap.size} offsets found`;
+            document.getElementById('lineCount').innerHTML = `${totalLines.toLocaleString()} lines`;
             
             if (offset < file.size) {
                 setTimeout(processNextChunk, 5);
             } else {
-                allOffsets = Array.from(uniqueMap.values());
-                allOffsets.sort((a, b) => parseInt(a.addr, 16) - parseInt(b.addr, 16));
-                totalPages = Math.ceil(allOffsets.length / itemsPerPage);
-                currentPage = 1;
-                displayPage();
-                document.getElementById('scanStatus').innerHTML = '● COMPLETE';
+                if (leftover.trim()) allLines.push(leftover);
+                document.getElementById('scanStatus').innerHTML = '● READY';
                 document.getElementById('progressBar').style.width = '100%';
                 document.getElementById('progressText').innerHTML = '100%';
-                document.getElementById('status').innerHTML = `[COMPLETE] ${allOffsets.length} unique offsets found. ${totalPages} pages.`;
-                document.getElementById('smartBtn').disabled = false;
+                document.getElementById('status').innerHTML = `[READY] ${allLines.length.toLocaleString()} lines loaded. Start searching.`;
+                document.getElementById('resultsList').innerHTML = '<p style="color:#666; padding:20px; text-align:center;">Type something in the search box</p>';
+                document.getElementById('searchInput').disabled = false;
+                document.getElementById('searchInput').placeholder = 'Type to search... (ex: get_, Vector3, Player, 0x)';
             }
         };
         
@@ -206,174 +160,148 @@ function extractOffsets() {
     processNextChunk();
 }
 
-function displayPage() {
-    const start = (currentPage - 1) * itemsPerPage;
-    const end = start + itemsPerPage;
-    const pageOffsets = allOffsets.slice(start, end);
+function filterLines() {
+    const searchTerm = document.getElementById('searchInput').value;
+    const resultsDiv = document.getElementById('resultsList');
+    const resultCountSpan = document.getElementById('resultCount');
     
-    const container = document.getElementById('offsetsList');
+    if (!searchTerm.trim()) {
+        filteredLines = [];
+        resultsDiv.innerHTML = '<p style="color:#666; padding:20px; text-align:center;">Type something to search</p>';
+        resultCountSpan.innerHTML = '0 lines';
+        return;
+    }
+    
+    const term = searchTerm.toLowerCase();
+    filteredLines = [];
+    
+    for (let i = 0; i < allLines.length; i++) {
+        if (allLines[i].toLowerCase().includes(term)) {
+            filteredLines.push({ index: i, line: allLines[i] });
+        }
+    }
+    
+    resultCountSpan.innerHTML = `${filteredLines.length} lines`;
+    
+    if (filteredLines.length === 0) {
+        resultsDiv.innerHTML = '<p style="color:#666; padding:20px; text-align:center;">No results found</p>';
+        return;
+    }
+    
     let html = '';
-    
-    for (const item of pageOffsets) {
-        const isSelected = selectedOffsets.has(item.addr);
-        html += `<div class="offset-card ${isSelected ? 'selected' : ''}" onclick="toggleOffset('${item.addr}')">
-            <div class="offset-addr">📍 ${item.addr}</div>
-            ${item.className ? `<div class="offset-class">📦 Class: ${item.className}</div>` : ''}
-            ${item.funcName ? `<div class="offset-class">🔧 Function: ${item.funcName}</div>` : ''}
-            ${item.returnType ? `<div class="offset-class">📤 Return: ${item.returnType}</div>` : ''}
-            <div class="offset-context">${escapeHtml(item.line.substring(0, 150))}${item.line.length > 150 ? '...' : ''}</div>
+    for (const item of filteredLines) {
+        const isSelected = selectedIndices.has(item.index);
+        // Highlight the search term
+        let displayLine = item.line;
+        const regex = new RegExp(`(${searchTerm})`, 'gi');
+        displayLine = displayLine.replace(regex, '<span style="background:#0a3a0a; color:#0f0;">$1</span>');
+        
+        // Extract offset if present
+        const offsetMatch = item.line.match(/(?:RVA|Offset):\s*(0x[0-9A-Fa-f]+)/i);
+        const offsetBadge = offsetMatch ? `<span class="offset-badge">${offsetMatch[1]}</span>` : '';
+        
+        html += `<div class="result-line ${isSelected ? 'selected' : ''}" onclick="toggleSelectLine(${item.index})">
+            <span style="color:#666;">${item.index}:</span> ${offsetBadge} ${displayLine.substring(0, 200)}${displayLine.length > 200 ? '...' : ''}
         </div>`;
     }
     
-    if (allOffsets.length === 0) {
-        html = '<p style="color:#666; padding:20px; text-align:center;">No offsets found.</p>';
-    }
-    
-    container.innerHTML = html;
-    
-    // Pagination
-    const paginationDiv = document.getElementById('pagination');
-    let paginationHtml = '';
-    paginationHtml += `<button class="page-btn" onclick="goToPage(1)" ${currentPage === 1 ? 'disabled' : ''}>⏮ First</button>`;
-    paginationHtml += `<button class="page-btn" onclick="goToPage(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''}>◀ Prev</button>`;
-    let startPage = Math.max(1, currentPage - 3);
-    let endPage = Math.min(totalPages, currentPage + 3);
-    for (let i = startPage; i <= endPage; i++) {
-        paginationHtml += `<button class="page-btn ${i === currentPage ? 'active' : ''}" onclick="goToPage(${i})">${i}</button>`;
-    }
-    paginationHtml += `<button class="page-btn" onclick="goToPage(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''}>Next ▶</button>`;
-    paginationHtml += `<button class="page-btn" onclick="goToPage(${totalPages})" ${currentPage === totalPages ? 'disabled' : ''}>Last ⏭</button>`;
-    paginationHtml += `<span style="color:#666; margin-left:10px;">Page ${currentPage} / ${totalPages} (${allOffsets.length} total)</span>`;
-    paginationDiv.innerHTML = paginationHtml;
+    resultsDiv.innerHTML = html;
 }
 
-function goToPage(page) {
-    if (page < 1 || page > totalPages) return;
-    currentPage = page;
-    displayPage();
-}
-
-function toggleOffset(addr) {
-    if (selectedOffsets.has(addr)) {
-        selectedOffsets.delete(addr);
+function toggleSelectLine(index) {
+    if (selectedIndices.has(index)) {
+        selectedIndices.delete(index);
     } else {
-        selectedOffsets.add(addr);
+        selectedIndices.add(index);
     }
-    // Update card style
-    const cards = document.getElementsByClassName('offset-card');
-    for (let i = 0; i < cards.length; i++) {
-        const card = cards[i];
-        const addrMatch = card.innerHTML.match(/📍 (0x[0-9A-Fa-f]+)/);
-        if (addrMatch && addrMatch[1] === addr) {
-            if (selectedOffsets.has(addr)) card.classList.add('selected');
-            else card.classList.remove('selected');
-        }
-    }
-    updateSelectedCount();
+    filterLines(); // Refresh display
+    updateSelectedPanel();
 }
 
-function selectAllOnPage() {
-    const start = (currentPage - 1) * itemsPerPage;
-    const end = start + itemsPerPage;
-    const pageOffsets = allOffsets.slice(start, end);
-    for (const item of pageOffsets) selectedOffsets.add(item.addr);
-    displayPage();
-    updateSelectedCount();
+function selectAllFiltered() {
+    for (const item of filteredLines) {
+        selectedIndices.add(item.index);
+    }
+    filterLines();
+    updateSelectedPanel();
 }
 
 function clearSelection() {
-    selectedOffsets.clear();
-    displayPage();
-    updateSelectedCount();
+    selectedIndices.clear();
+    filterLines();
+    updateSelectedPanel();
 }
 
-function updateSelectedCount() {
-    document.getElementById('status').innerHTML = `[INFO] ${selectedOffsets.size} offsets selected.`;
-}
-
-function generateSelectedOffsets() {
-    if (selectedOffsets.size === 0) {
-        document.getElementById('status').innerHTML = '[ERROR] No offsets selected.';
+function updateSelectedPanel() {
+    const panel = document.getElementById('selectedPanel');
+    const listDiv = document.getElementById('selectedList');
+    
+    if (selectedIndices.size === 0) {
+        panel.style.display = 'none';
         return;
     }
-    const selectedItems = allOffsets.filter(item => selectedOffsets.has(item.addr));
-    let output = '// ============ SELECTED OFFSETS ============\n\n';
-    for (const item of selectedItems) {
-        let name = item.funcName ? item.funcName.toUpperCase() : (item.className ? item.className.toUpperCase() + '_' + item.addr.substring(2) : 'OFFSET_' + item.addr.substring(2));
-        output += `#define ${name}    ${item.addr}\n`;
-    }
-    document.getElementById('outputOffsets').value = output;
-    document.getElementById('status').innerHTML = `[SUCCESS] ${selectedItems.length} offsets generated.`;
-}
-
-function smartGuess() {
-    const targets = [
-        { name: 'get_LocalPlayer', keywords: ['LocalPlayer', 'localPlayer', 'GetLocalPlayer', 'get_LocalPlayer', 'm_localPlayer', '_localPlayer', 'MyPlayer', 'myPlayer'], returnTypeHint: 'Player' },
-        { name: 'get_Players', keywords: ['get_Players', 'GetPlayers', 'getPlayers', 'Players', 'playerList', 'm_players', '_players', 'GetAllPlayers'], returnTypeHint: 'List' },
-        { name: 'get_Position', keywords: ['get_Position', 'GetPosition', 'get_position', 'position', 'Position', 'get_pos', '_position', 'm_position'], returnTypeHint: 'Vector3' },
-        { name: 'get_Rotation', keywords: ['get_Rotation', 'GetRotation', 'get_rotation', 'rotation', 'Rotation', 'get_rot', '_rotation', 'm_rotation'], returnTypeHint: 'Quaternion' },
-        { name: 'get_Team', keywords: ['get_Team', 'GetTeam', 'get_team', 'team', 'Team', 'teamId', 'TeamId', 'm_team', '_team'], returnTypeHint: 'int' },
-        { name: 'get_Health', keywords: ['get_Health', 'GetHealth', 'get_health', 'health', 'Health', 'currentHealth', 'm_health', '_health'], returnTypeHint: 'float' },
-        { name: 'WorldToScreenPoint', keywords: ['WorldToScreenPoint', 'WorldToScreen', 'worldToScreen', 'WorldToScreenPoint_Injected'], returnTypeHint: 'Vector3' },
-        { name: 'Camera_get_main', keywords: ['get_main', 'GetMain', 'mainCamera', 'MainCamera', 'Camera.main', 'get_mainCamera'], returnTypeHint: 'Camera' }
-    ];
     
-    suggestions = {};
-    for (const target of targets) {
-        let bestMatch = null;
-        let bestScore = 0;
-        for (const item of allOffsets) {
-            let score = 0;
-            const context = (item.line + ' ' + item.prevLine + ' ' + item.className + ' ' + item.funcName).toLowerCase();
-            for (const kw of target.keywords) {
-                if (context.includes(kw.toLowerCase())) score += 10;
-            }
-            if (item.returnType && target.returnTypeHint && item.returnType.toLowerCase().includes(target.returnTypeHint.toLowerCase())) score += 20;
-            if (item.funcName && target.keywords.some(kw => item.funcName.toLowerCase().includes(kw.toLowerCase()))) score += 30;
-            if (score > bestScore) {
-                bestScore = score;
-                bestMatch = item;
-            }
-        }
-        if (bestMatch && bestScore > 0) {
-            suggestions[target.name] = bestMatch;
-        }
-    }
-    
-    // Display suggestions
-    const panel = document.getElementById('suggestionsPanel');
-    const listDiv = document.getElementById('suggestionsList');
+    panel.style.display = 'block';
     let html = '';
-    for (const [name, item] of Object.entries(suggestions)) {
-        html += `<div class="suggestion-item" onclick="selectSuggestion('${name}')">
-            <span class="suggestion-label">${name}</span> → <span style="color:#0f0;">${item.addr}</span>
-            <div style="font-size:10px; color:#666;">${item.line.substring(0, 100)}</div>
+    const selectedLines = [];
+    for (const idx of selectedIndices) {
+        selectedLines.push({ index: idx, line: allLines[idx] });
+    }
+    selectedLines.sort((a, b) => a.index - b.index);
+    
+    for (const item of selectedLines) {
+        const offsetMatch = item.line.match(/(?:RVA|Offset):\s*(0x[0-9A-Fa-f]+)/i);
+        const offsetBadge = offsetMatch ? `<span class="offset-badge">${offsetMatch[1]}</span>` : '';
+        html += `<div style="padding:5px; border-bottom:1px solid #333; font-size:11px;">
+            <span style="color:#666;">${item.index}:</span> ${offsetBadge} ${escapeHtml(item.line.substring(0, 150))}
+            <button onclick="removeSelected(${item.index})" style="float:right; background:#330000; padding:2px 8px;">✕</button>
         </div>`;
     }
-    if (html === '') html = '<p>No strong matches found. Try manual selection.</p>';
     listDiv.innerHTML = html;
-    panel.style.display = 'block';
-    document.getElementById('status').innerHTML = '[INFO] Smart guess completed. Click on a suggestion to select that offset.';
 }
 
-function selectSuggestion(funcName) {
-    const item = suggestions[funcName];
-    if (item) {
-        selectedOffsets.add(item.addr);
-        // Refresh current page to highlight
-        displayPage();
-        updateSelectedCount();
-        document.getElementById('status').innerHTML = `[INFO] Added ${funcName} offset ${item.addr} to selection.`;
-    }
+function removeSelected(index) {
+    selectedIndices.delete(index);
+    updateSelectedPanel();
+    filterLines();
 }
 
-function applySuggestedOffsets() {
-    for (const item of Object.values(suggestions)) {
-        selectedOffsets.add(item.addr);
+function generateOffsets() {
+    if (selectedIndices.size === 0) {
+        document.getElementById('status').innerHTML = '[ERROR] No lines selected. Click on lines to select them.';
+        return;
     }
-    displayPage();
-    updateSelectedCount();
-    document.getElementById('status').innerHTML = `[SUCCESS] Applied all ${Object.keys(suggestions).length} suggested offsets.`;
+    
+    let output = '// ============ SELECTED OFFSETS ============\n\n';
+    output += `// Total selected lines: ${selectedIndices.size}\n\n`;
+    
+    const selectedLines = [];
+    for (const idx of selectedIndices) {
+        selectedLines.push({ index: idx, line: allLines[idx] });
+    }
+    selectedLines.sort((a, b) => a.index - b.index);
+    
+    for (const item of selectedLines) {
+        const offsetMatch = item.line.match(/(?:RVA|Offset):\s*(0x[0-9A-Fa-f]+)/i);
+        if (offsetMatch) {
+            output += `// Line ${item.index}: ${item.line.substring(0, 100)}\n`;
+            output += `#define OFFSET_${offsetMatch[1].substring(2)}    ${offsetMatch[1]}\n\n`;
+        } else {
+            output += `// Line ${item.index}: ${item.line.substring(0, 100)} (no offset found)\n\n`;
+        }
+    }
+    
+    document.getElementById('outputOffsets').value = output;
+    document.getElementById('status').innerHTML = `[SUCCESS] Generated ${selectedIndices.size} offsets from selected lines.`;
+}
+
+function copySelectedToClipboard() {
+    let text = '';
+    for (const idx of selectedIndices) {
+        text += allLines[idx] + '\n';
+    }
+    navigator.clipboard.writeText(text);
+    document.getElementById('status').innerHTML = `[INFO] ${selectedIndices.size} lines copied to clipboard.`;
 }
 
 function escapeHtml(text) {
