@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NEXUS - Raw Offsets Extractor</title>
+    <title>NEXUS - Offsets Extractor (Pagination)</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { background: #000000; font-family: 'Courier New', monospace; min-height: 100vh; padding: 20px; }
@@ -15,26 +15,33 @@
         @media (max-width: 768px) { .grid { grid-template-columns: 1fr; } }
         .panel { background: #0a0a0a; border: 1px solid #333; padding: 20px; }
         .panel h3 { color: #fff; margin-bottom: 15px; font-weight: normal; }
-        textarea { width: 100%; background: #000; color: #0f0; border: 1px solid #333; font-family: monospace; font-size: 12px; padding: 12px; resize: vertical; }
         button { background: #111; color: #fff; border: 1px solid #333; padding: 12px 24px; cursor: pointer; font-family: monospace; margin-top: 10px; }
         button:hover { background: #222; border-color: #fff; }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
         .status { margin-top: 15px; padding: 12px; background: #0a0a0a; border-left: 2px solid #fff; color: #ccc; font-size: 12px; max-height: 150px; overflow-y: auto; }
         .file-zone { border: 1px dashed #333; padding: 30px; text-align: center; margin-bottom: 15px; cursor: pointer; transition: all 0.2s; }
         .file-zone:hover { border-color: #0f0; background: #0a0a0a; }
         .progress-container { width: 100%; background: #1a1a1a; margin-top: 10px; position: relative; }
         .progress-bar { width: 0%; height: 20px; background: #0f0; transition: width 0.3s; }
         .progress-text { position: absolute; top: 2px; left: 10px; color: #000; font-size: 11px; font-weight: bold; }
-        .offset-list { max-height: 400px; overflow-y: auto; }
-        .offset-item { font-family: monospace; padding: 4px; border-bottom: 1px solid #333; cursor: pointer; }
-        .offset-item:hover { background: #1a1a1a; }
-        .offset-selected { background: #0a3a0a; border-left: 2px solid #0f0; }
+        .offset-card { background: #0a0a0a; border: 1px solid #333; margin-bottom: 8px; padding: 10px; cursor: pointer; transition: all 0.2s; }
+        .offset-card:hover { background: #1a1a1a; border-color: #0f0; }
+        .offset-card.selected { background: #0a3a0a; border-color: #0f0; }
+        .offset-addr { color: #0f0; font-weight: bold; font-size: 12px; }
+        .offset-context { color: #ccc; font-size: 10px; margin-top: 5px; font-family: monospace; word-break: break-all; }
+        .offset-class { color: #ff0; font-size: 10px; margin-top: 3px; }
+        .offsets-list { max-height: 500px; overflow-y: auto; }
+        .pagination { display: flex; gap: 10px; margin-top: 15px; justify-content: center; flex-wrap: wrap; }
+        .page-btn { background: #111; color: #fff; border: 1px solid #333; padding: 5px 12px; cursor: pointer; font-size: 12px; }
+        .page-btn.active { background: #0f0; color: #000; border-color: #0f0; }
+        .page-btn:hover { background: #222; }
     </style>
 </head>
 <body>
 <div class="container">
     <div class="header">
-        <h1>NEXUS RAW OFFSETS EXTRACTOR</h1>
-        <p>Extracts ALL offsets from dump.cs - then you select which ones to use</p>
+        <h1>NEXUS OFFSETS EXTRACTOR</h1>
+        <p>Extracts offsets with context - Paginated for large files (no crash)</p>
     </div>
     
     <div class="grid">
@@ -43,7 +50,7 @@
             <div class="file-zone" onclick="document.getElementById('dumpFile').click()">
                 <p>📁 CLICK TO SELECT DUMP.CS FILE</p>
             </div>
-            <input type="file" id="dumpFile" accept=".cs,.txt" style="display:none;" onchange="extractAllOffsets()">
+            <input type="file" id="dumpFile" accept=".cs,.txt" style="display:none;" onchange="extractOffsets()">
             
             <div class="progress-container" style="margin-top:15px;">
                 <div class="progress-bar" id="progressBar"></div>
@@ -58,31 +65,39 @@
         </div>
         
         <div class="panel">
-            <h3>ALL OFFSETS FOUND</h3>
-            <div id="offsetsList" class="offset-list" style="height: 400px; overflow-y: auto; background: #000; border: 1px solid #333;">
+            <h3>OFFSETS (click to select)</h3>
+            <div id="offsetsList" class="offsets-list" style="height: 450px; overflow-y: auto; background: #000; border: 1px solid #333;">
                 <p style="color:#666; padding:20px; text-align:center;">Select a dump.cs file</p>
             </div>
-            <button onclick="generateOffsetsFromSelection()">GENERATE FROM SELECTED</button>
-            <button onclick="copyAllOffsets()">COPY ALL OFFSETS</button>
+            <div id="pagination" class="pagination"></div>
+            <div style="margin-top:10px;">
+                <button onclick="generateSelectedOffsets()">GENERATE SELECTED</button>
+                <button onclick="selectAllOnPage()">SELECT ALL ON PAGE</button>
+                <button onclick="clearSelection()">CLEAR SELECTION</button>
+            </div>
         </div>
     </div>
     
     <div id="status" class="status">Ready - Select a dump.cs file</div>
-    <textarea id="outputOffsets" rows="5" readonly placeholder="Generated offsets will appear here..." style="margin-top:15px;"></textarea>
+    <textarea id="outputOffsets" rows="6" readonly placeholder="Generated offsets will appear here..." style="margin-top:15px; width:100%; background:#000; color:#0f0; border:1px solid #333; padding:10px; font-family:monospace;"></textarea>
 </div>
 
 <script>
 let allOffsets = [];
-let selectedOffsets = {};
+let selectedOffsets = new Set();
+let currentPage = 1;
+const itemsPerPage = 100;
+let totalPages = 1;
 
-function extractAllOffsets() {
+function extractOffsets() {
     const file = document.getElementById('dumpFile').files[0];
     if (!file) return;
     
     allOffsets = [];
-    selectedOffsets = {};
+    selectedOffsets.clear();
     
     document.getElementById('offsetsList').innerHTML = '<p style="color:#666; padding:20px; text-align:center;">Scanning...</p>';
+    document.getElementById('pagination').innerHTML = '';
     document.getElementById('outputOffsets').value = '';
     document.getElementById('progressBar').style.width = '0%';
     document.getElementById('progressText').innerHTML = '0%';
@@ -92,10 +107,12 @@ function extractAllOffsets() {
     document.getElementById('foundCount').innerHTML = '0 offsets';
     document.getElementById('status').innerHTML = `[STATUS] Scanning ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)...`;
     
-    const chunkSize = 1024 * 1024 * 2; // 2 MB chunks
+    const chunkSize = 1024 * 1024 * 2;
     let offset = 0;
     let leftover = '';
-    let uniqueOffsets = new Map();
+    let lineNumber = 0;
+    let allLines = [];
+    let uniqueMap = new Map();
     
     function processNextChunk() {
         const chunk = file.slice(offset, offset + chunkSize);
@@ -107,21 +124,28 @@ function extractAllOffsets() {
             leftover = lines.pop();
             
             for (const line of lines) {
-                // Extract RVA or Offset
+                allLines.push(line);
+                lineNumber++;
+                
                 const rvaMatch = line.match(/(?:RVA|Offset):\s*0x([0-9A-Fa-f]+)/i);
                 if (rvaMatch) {
                     const offsetValue = `0x${rvaMatch[1]}`;
-                    if (!uniqueOffsets.has(offsetValue)) {
-                        // Try to get function name from the line
+                    if (!uniqueMap.has(offsetValue)) {
+                        const prevLine = allLines.length > 1 ? allLines[allLines.length - 2] : '';
+                        
+                        let className = '';
+                        const classMatch = prevLine.match(/(?:public|private|internal)\s+(?:class|struct)\s+(\w+)/);
+                        if (classMatch) className = classMatch[1];
+                        
                         let funcName = '';
-                        const nameMatch = line.match(/public\s+\w+\s+(\w+)\s*\(/);
-                        if (nameMatch) {
-                            funcName = nameMatch[1];
-                        }
-                        uniqueOffsets.set(offsetValue, {
-                            offset: offsetValue,
+                        const funcMatch = line.match(/public\s+\w+\s+(\w+)\s*\(/);
+                        if (funcMatch) funcName = funcMatch[1];
+                        
+                        uniqueMap.set(offsetValue, {
+                            addr: offsetValue,
+                            className: className,
                             funcName: funcName,
-                            preview: line.substring(0, 100)
+                            line: line.substring(0, 200)
                         });
                     }
                 }
@@ -132,121 +156,50 @@ function extractAllOffsets() {
             document.getElementById('progressBar').style.width = `${percent}%`;
             document.getElementById('progressText').innerHTML = `${Math.round(percent)}%`;
             document.getElementById('bytesRead').innerHTML = `${(offset / 1024 / 1024).toFixed(1)} MB`;
-            document.getElementById('foundCount').innerHTML = `${uniqueOffsets.size} offsets`;
-            document.getElementById('status').innerHTML = `[STATUS] Scanning... ${Math.round(percent)}% | ${uniqueOffsets.size} unique offsets found`;
+            document.getElementById('foundCount').innerHTML = `${uniqueMap.size} offsets`;
+            document.getElementById('status').innerHTML = `[STATUS] Scanning... ${Math.round(percent)}% | ${uniqueMap.size} offsets found`;
             
             if (offset < file.size) {
                 setTimeout(processNextChunk, 5);
             } else {
-                finishScan(uniqueOffsets);
+                allOffsets = Array.from(uniqueMap.values());
+                allOffsets.sort((a, b) => parseInt(a.addr, 16) - parseInt(b.addr, 16));
+                totalPages = Math.ceil(allOffsets.length / itemsPerPage);
+                currentPage = 1;
+                displayPage();
+                document.getElementById('scanStatus').innerHTML = '● COMPLETE';
+                document.getElementById('scanStatus').style.color = '#0f0';
+                document.getElementById('progressBar').style.width = '100%';
+                document.getElementById('progressText').innerHTML = '100%';
+                document.getElementById('status').innerHTML = `[COMPLETE] ${allOffsets.length} unique offsets found. ${totalPages} pages.`;
             }
         };
         
         reader.onerror = function() {
             document.getElementById('status').innerHTML = '[ERROR] Failed to read file';
-            finishScan(new Map());
         };
         
         reader.readAsText(chunk);
     }
     
-    function finishScan(offsetsMap) {
-        allOffsets = Array.from(offsetsMap.values());
-        // Sort by offset value
-        allOffsets.sort((a, b) => parseInt(a.offset, 16) - parseInt(b.offset, 16));
-        
-        displayOffsetsList();
-        document.getElementById('scanStatus').innerHTML = '● COMPLETE';
-        document.getElementById('scanStatus').style.color = '#0f0';
-        document.getElementById('progressBar').style.width = '100%';
-        document.getElementById('progressText').innerHTML = '100%';
-        document.getElementById('status').innerHTML = `[COMPLETE] ${allOffsets.length} unique offsets found. Select the ones you need.`;
-    }
-    
-    function displayOffsetsList() {
-        const container = document.getElementById('offsetsList');
-        let html = '';
-        
-        for (let i = 0; i < allOffsets.length; i++) {
-            const item = allOffsets[i];
-            const isSelected = selectedOffsets[item.offset];
-            html += `<div class="offset-item ${isSelected ? 'offset-selected' : ''}" onclick="toggleOffset('${item.offset}')">
-                <span style="color:#0f0;">${item.offset}</span>
-                ${item.funcName ? `<span style="color:#ff0;"> → ${item.funcName}</span>` : ''}
-                <span style="color:#666; display:block; font-size:10px;">${item.preview.substring(0, 80)}...</span>
-            </div>`;
-        }
-        
-        if (allOffsets.length === 0) {
-            html = '<p style="color:#666; padding:20px; text-align:center;">No offsets found. The dump may not contain RVA/Offset patterns.</p>';
-        }
-        
-        container.innerHTML = html;
-    }
-    
     processNextChunk();
 }
 
-function toggleOffset(offset) {
-    if (selectedOffsets[offset]) {
-        delete selectedOffsets[offset];
-    } else {
-        selectedOffsets[offset] = true;
-    }
-    displayOffsetsList();
-    updateSelectedCount();
-}
-
-function updateSelectedCount() {
-    const count = Object.keys(selectedOffsets).length;
-    document.getElementById('status').innerHTML = `[INFO] ${count} offsets selected. Click "GENERATE FROM SELECTED" to create your offset list.`;
-}
-
-function generateOffsetsFromSelection() {
-    const selected = Object.keys(selectedOffsets);
-    if (selected.length === 0) {
-        document.getElementById('status').innerHTML = '[ERROR] No offsets selected. Click on offsets to select them.';
-        return;
-    }
+function displayPage() {
+    const start = (currentPage - 1) * itemsPerPage;
+    const end = start + itemsPerPage;
+    const pageOffsets = allOffsets.slice(start, end);
     
-    let output = '// ============ SELECTED OFFSETS ============\n\n';
-    output += `// Total selected: ${selected.length}\n\n`;
-    
-    // Group by possible function types (heuristic based on address range)
-    output += '// You can rename these in your Tweak.xm file\n\n';
-    
-    for (let i = 0; i < selected.length; i++) {
-        output += `#define CUSTOM_OFFSET_${i}    ${selected[i]}\n`;
-    }
-    
-    output += '\n// ============ USAGE ============\n';
-    output += '// Copy these #defines into your Tweak.xm file\n';
-    output += '// Rename CUSTOM_OFFSET_X to meaningful names like OFFSET_GET_POSITION\n';
-    
-    document.getElementById('outputOffsets').value = output;
-    document.getElementById('status').innerHTML = `[SUCCESS] ${selected.length} offsets generated. Copy them to your Tweak.xm file.`;
-}
-
-function copyAllOffsets() {
-    let text = '';
-    for (const item of allOffsets) {
-        text += `${item.offset}\n`;
-    }
-    navigator.clipboard.writeText(text);
-    document.getElementById('status').innerHTML = '[INFO] All offsets copied to clipboard';
-}
-
-function displayOffsetsList() {
     const container = document.getElementById('offsetsList');
     let html = '';
     
-    for (let i = 0; i < allOffsets.length; i++) {
-        const item = allOffsets[i];
-        const isSelected = selectedOffsets[item.offset];
-        html += `<div class="offset-item ${isSelected ? 'offset-selected' : ''}" onclick="toggleOffset('${item.offset}')">
-            <span style="color:#0f0;">${item.offset}</span>
-            ${item.funcName ? `<span style="color:#ff0;"> → ${item.funcName}</span>` : ''}
-            <span style="color:#666; display:block; font-size:10px;">${item.preview.substring(0, 80)}...</span>
+    for (const item of pageOffsets) {
+        const isSelected = selectedOffsets.has(item.addr);
+        html += `<div class="offset-card ${isSelected ? 'selected' : ''}" onclick="toggleOffset('${item.addr}')">
+            <div class="offset-addr">📍 ${item.addr}</div>
+            ${item.className ? `<div class="offset-class">📦 Class: ${item.className}</div>` : ''}
+            ${item.funcName ? `<div class="offset-class">🔧 Function: ${item.funcName}</div>` : ''}
+            <div class="offset-context">${escapeHtml(item.line.substring(0, 150))}${item.line.length > 150 ? '...' : ''}</div>
         </div>`;
     }
     
@@ -255,6 +208,117 @@ function displayOffsetsList() {
     }
     
     container.innerHTML = html;
+    
+    // Update pagination
+    const paginationDiv = document.getElementById('pagination');
+    let paginationHtml = '';
+    
+    paginationHtml += `<button class="page-btn" onclick="goToPage(1)" ${currentPage === 1 ? 'disabled' : ''}>⏮ First</button>`;
+    paginationHtml += `<button class="page-btn" onclick="goToPage(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''}>◀ Prev</button>`;
+    
+    let startPage = Math.max(1, currentPage - 3);
+    let endPage = Math.min(totalPages, currentPage + 3);
+    for (let i = startPage; i <= endPage; i++) {
+        paginationHtml += `<button class="page-btn ${i === currentPage ? 'active' : ''}" onclick="goToPage(${i})">${i}</button>`;
+    }
+    
+    paginationHtml += `<button class="page-btn" onclick="goToPage(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''}>Next ▶</button>`;
+    paginationHtml += `<button class="page-btn" onclick="goToPage(${totalPages})" ${currentPage === totalPages ? 'disabled' : ''}>Last ⏭</button>`;
+    paginationHtml += `<span style="color:#666; margin-left:10px;">Page ${currentPage} / ${totalPages} (${allOffsets.length} total)</span>`;
+    
+    paginationDiv.innerHTML = paginationHtml;
+}
+
+function goToPage(page) {
+    if (page < 1 || page > totalPages) return;
+    currentPage = page;
+    displayPage();
+}
+
+function toggleOffset(addr) {
+    if (selectedOffsets.has(addr)) {
+        selectedOffsets.delete(addr);
+    } else {
+        selectedOffsets.add(addr);
+    }
+    
+    // Update the card style
+    const cards = document.getElementsByClassName('offset-card');
+    for (let i = 0; i < cards.length; i++) {
+        const card = cards[i];
+        const addrMatch = card.innerHTML.match(/📍 (0x[0-9A-Fa-f]+)/);
+        if (addrMatch && addrMatch[1] === addr) {
+            if (selectedOffsets.has(addr)) {
+                card.classList.add('selected');
+            } else {
+                card.classList.remove('selected');
+            }
+        }
+    }
+    
+    updateSelectedCount();
+}
+
+function selectAllOnPage() {
+    const start = (currentPage - 1) * itemsPerPage;
+    const end = start + itemsPerPage;
+    const pageOffsets = allOffsets.slice(start, end);
+    
+    for (const item of pageOffsets) {
+        selectedOffsets.add(item.addr);
+    }
+    displayPage();
+    updateSelectedCount();
+}
+
+function clearSelection() {
+    selectedOffsets.clear();
+    displayPage();
+    updateSelectedCount();
+}
+
+function updateSelectedCount() {
+    document.getElementById('status').innerHTML = `[INFO] ${selectedOffsets.size} offsets selected.`;
+}
+
+function generateSelectedOffsets() {
+    if (selectedOffsets.size === 0) {
+        document.getElementById('status').innerHTML = '[ERROR] No offsets selected. Click on offsets to select them.';
+        return;
+    }
+    
+    const selectedItems = allOffsets.filter(item => selectedOffsets.has(item.addr));
+    
+    let output = '// ============ SELECTED OFFSETS ============\n\n';
+    output += `// Total selected: ${selectedItems.length}\n\n`;
+    
+    for (const item of selectedItems) {
+        let name = '';
+        if (item.funcName && item.funcName !== 'get_Position' && item.funcName !== 'get_Rotation') {
+            name = item.funcName.toUpperCase();
+        } else if (item.className) {
+            name = item.className.toUpperCase() + '_' + item.addr.substring(2);
+        } else {
+            name = 'OFFSET_' + item.addr.substring(2);
+        }
+        output += `#define ${name}    ${item.addr}\n`;
+    }
+    
+    output += '\n// ============ USAGE ============\n';
+    output += '// Copy these #defines into your Tweak.xm file\n';
+    output += '// Rename them to meaningful names like OFFSET_GET_POSITION, OFFSET_GET_LOCAL_PLAYER, etc.\n';
+    
+    document.getElementById('outputOffsets').value = output;
+    document.getElementById('status').innerHTML = `[SUCCESS] ${selectedItems.length} offsets generated.`;
+}
+
+function escapeHtml(text) {
+    return text.replace(/[&<>]/g, function(m) {
+        if (m === '&') return '&amp;';
+        if (m === '<') return '&lt;';
+        if (m === '>') return '&gt;';
+        return m;
+    });
 }
 </script>
 </body>
