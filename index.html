@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NEXUS - Offsets Extractor (Pagination)</title>
+    <title>NEXUS - Smart Offsets Extractor</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { background: #000000; font-family: 'Courier New', monospace; min-height: 100vh; padding: 20px; }
@@ -15,9 +15,8 @@
         @media (max-width: 768px) { .grid { grid-template-columns: 1fr; } }
         .panel { background: #0a0a0a; border: 1px solid #333; padding: 20px; }
         .panel h3 { color: #fff; margin-bottom: 15px; font-weight: normal; }
-        button { background: #111; color: #fff; border: 1px solid #333; padding: 12px 24px; cursor: pointer; font-family: monospace; margin-top: 10px; }
+        button { background: #111; color: #fff; border: 1px solid #333; padding: 12px 24px; cursor: pointer; font-family: monospace; margin-top: 10px; margin-right: 10px; }
         button:hover { background: #222; border-color: #fff; }
-        button:disabled { opacity: 0.5; cursor: not-allowed; }
         .status { margin-top: 15px; padding: 12px; background: #0a0a0a; border-left: 2px solid #fff; color: #ccc; font-size: 12px; max-height: 150px; overflow-y: auto; }
         .file-zone { border: 1px dashed #333; padding: 30px; text-align: center; margin-bottom: 15px; cursor: pointer; transition: all 0.2s; }
         .file-zone:hover { border-color: #0f0; background: #0a0a0a; }
@@ -34,14 +33,18 @@
         .pagination { display: flex; gap: 10px; margin-top: 15px; justify-content: center; flex-wrap: wrap; }
         .page-btn { background: #111; color: #fff; border: 1px solid #333; padding: 5px 12px; cursor: pointer; font-size: 12px; }
         .page-btn.active { background: #0f0; color: #000; border-color: #0f0; }
-        .page-btn:hover { background: #222; }
+        .suggestions { background: #0a0a0a; border: 1px solid #333; padding: 10px; margin-top: 15px; max-height: 300px; overflow-y: auto; }
+        .suggestion-item { padding: 8px; border-bottom: 1px solid #333; cursor: pointer; }
+        .suggestion-item:hover { background: #1a1a1a; }
+        .suggestion-label { color: #0f0; font-weight: bold; }
+        hr { border-color: #333; margin: 15px 0; }
     </style>
 </head>
 <body>
 <div class="container">
     <div class="header">
-        <h1>NEXUS OFFSETS EXTRACTOR</h1>
-        <p>Extracts offsets with context - Paginated for large files (no crash)</p>
+        <h1>NEXUS SMART OFFSETS EXTRACTOR</h1>
+        <p>Extracts offsets + Smart Guess to auto-detect important functions</p>
     </div>
     
     <div class="grid">
@@ -62,15 +65,17 @@
                 <span id="bytesRead" style="color:#666; margin-left:10px;">0 MB</span>
                 <span id="foundCount" style="color:#0f0; margin-left:10px;">0 offsets</span>
             </div>
+            
+            <button onclick="smartGuess()" id="smartBtn" style="background:#0a0; color:#000;" disabled>🔍 SMART GUESS (Auto-detect)</button>
         </div>
         
         <div class="panel">
             <h3>OFFSETS (click to select)</h3>
-            <div id="offsetsList" class="offsets-list" style="height: 450px; overflow-y: auto; background: #000; border: 1px solid #333;">
+            <div id="offsetsList" class="offsets-list" style="height: 350px; overflow-y: auto; background: #000; border: 1px solid #333;">
                 <p style="color:#666; padding:20px; text-align:center;">Select a dump.cs file</p>
             </div>
             <div id="pagination" class="pagination"></div>
-            <div style="margin-top:10px;">
+            <div>
                 <button onclick="generateSelectedOffsets()">GENERATE SELECTED</button>
                 <button onclick="selectAllOnPage()">SELECT ALL ON PAGE</button>
                 <button onclick="clearSelection()">CLEAR SELECTION</button>
@@ -79,6 +84,12 @@
     </div>
     
     <div id="status" class="status">Ready - Select a dump.cs file</div>
+    <div id="suggestionsPanel" style="display:none;">
+        <hr>
+        <h3 style="color:#0f0;">🔍 SMART GUESS RESULTS</h3>
+        <div id="suggestionsList" class="suggestions"></div>
+        <button onclick="applySuggestedOffsets()">APPLY ALL SUGGESTIONS</button>
+    </div>
     <textarea id="outputOffsets" rows="6" readonly placeholder="Generated offsets will appear here..." style="margin-top:15px; width:100%; background:#000; color:#0f0; border:1px solid #333; padding:10px; font-family:monospace;"></textarea>
 </div>
 
@@ -86,8 +97,9 @@
 let allOffsets = [];
 let selectedOffsets = new Set();
 let currentPage = 1;
-const itemsPerPage = 100;
+let itemsPerPage = 100;
 let totalPages = 1;
+let suggestions = {};
 
 function extractOffsets() {
     const file = document.getElementById('dumpFile').files[0];
@@ -95,6 +107,9 @@ function extractOffsets() {
     
     allOffsets = [];
     selectedOffsets.clear();
+    suggestions = {};
+    document.getElementById('suggestionsPanel').style.display = 'none';
+    document.getElementById('smartBtn').disabled = true;
     
     document.getElementById('offsetsList').innerHTML = '<p style="color:#666; padding:20px; text-align:center;">Scanning...</p>';
     document.getElementById('pagination').innerHTML = '';
@@ -102,7 +117,6 @@ function extractOffsets() {
     document.getElementById('progressBar').style.width = '0%';
     document.getElementById('progressText').innerHTML = '0%';
     document.getElementById('scanStatus').innerHTML = '● SCANNING';
-    document.getElementById('scanStatus').style.color = '#0f0';
     document.getElementById('bytesRead').innerHTML = '0 MB';
     document.getElementById('foundCount').innerHTML = '0 offsets';
     document.getElementById('status').innerHTML = `[STATUS] Scanning ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)...`;
@@ -132,6 +146,7 @@ function extractOffsets() {
                     const offsetValue = `0x${rvaMatch[1]}`;
                     if (!uniqueMap.has(offsetValue)) {
                         const prevLine = allLines.length > 1 ? allLines[allLines.length - 2] : '';
+                        const nextLine = lines.length > 0 ? lines[0] : '';
                         
                         let className = '';
                         const classMatch = prevLine.match(/(?:public|private|internal)\s+(?:class|struct)\s+(\w+)/);
@@ -141,11 +156,17 @@ function extractOffsets() {
                         const funcMatch = line.match(/public\s+\w+\s+(\w+)\s*\(/);
                         if (funcMatch) funcName = funcMatch[1];
                         
+                        let returnType = '';
+                        const returnMatch = line.match(/public\s+(\w+(?:<[^>]+>)?)\s+\w+\s*\(/);
+                        if (returnMatch) returnType = returnMatch[1];
+                        
                         uniqueMap.set(offsetValue, {
                             addr: offsetValue,
                             className: className,
                             funcName: funcName,
-                            line: line.substring(0, 200)
+                            returnType: returnType,
+                            line: line.substring(0, 300),
+                            prevLine: prevLine.substring(0, 200)
                         });
                     }
                 }
@@ -168,10 +189,10 @@ function extractOffsets() {
                 currentPage = 1;
                 displayPage();
                 document.getElementById('scanStatus').innerHTML = '● COMPLETE';
-                document.getElementById('scanStatus').style.color = '#0f0';
                 document.getElementById('progressBar').style.width = '100%';
                 document.getElementById('progressText').innerHTML = '100%';
                 document.getElementById('status').innerHTML = `[COMPLETE] ${allOffsets.length} unique offsets found. ${totalPages} pages.`;
+                document.getElementById('smartBtn').disabled = false;
             }
         };
         
@@ -199,6 +220,7 @@ function displayPage() {
             <div class="offset-addr">📍 ${item.addr}</div>
             ${item.className ? `<div class="offset-class">📦 Class: ${item.className}</div>` : ''}
             ${item.funcName ? `<div class="offset-class">🔧 Function: ${item.funcName}</div>` : ''}
+            ${item.returnType ? `<div class="offset-class">📤 Return: ${item.returnType}</div>` : ''}
             <div class="offset-context">${escapeHtml(item.line.substring(0, 150))}${item.line.length > 150 ? '...' : ''}</div>
         </div>`;
     }
@@ -209,23 +231,19 @@ function displayPage() {
     
     container.innerHTML = html;
     
-    // Update pagination
+    // Pagination
     const paginationDiv = document.getElementById('pagination');
     let paginationHtml = '';
-    
     paginationHtml += `<button class="page-btn" onclick="goToPage(1)" ${currentPage === 1 ? 'disabled' : ''}>⏮ First</button>`;
     paginationHtml += `<button class="page-btn" onclick="goToPage(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''}>◀ Prev</button>`;
-    
     let startPage = Math.max(1, currentPage - 3);
     let endPage = Math.min(totalPages, currentPage + 3);
     for (let i = startPage; i <= endPage; i++) {
         paginationHtml += `<button class="page-btn ${i === currentPage ? 'active' : ''}" onclick="goToPage(${i})">${i}</button>`;
     }
-    
     paginationHtml += `<button class="page-btn" onclick="goToPage(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''}>Next ▶</button>`;
     paginationHtml += `<button class="page-btn" onclick="goToPage(${totalPages})" ${currentPage === totalPages ? 'disabled' : ''}>Last ⏭</button>`;
     paginationHtml += `<span style="color:#666; margin-left:10px;">Page ${currentPage} / ${totalPages} (${allOffsets.length} total)</span>`;
-    
     paginationDiv.innerHTML = paginationHtml;
 }
 
@@ -241,21 +259,16 @@ function toggleOffset(addr) {
     } else {
         selectedOffsets.add(addr);
     }
-    
-    // Update the card style
+    // Update card style
     const cards = document.getElementsByClassName('offset-card');
     for (let i = 0; i < cards.length; i++) {
         const card = cards[i];
         const addrMatch = card.innerHTML.match(/📍 (0x[0-9A-Fa-f]+)/);
         if (addrMatch && addrMatch[1] === addr) {
-            if (selectedOffsets.has(addr)) {
-                card.classList.add('selected');
-            } else {
-                card.classList.remove('selected');
-            }
+            if (selectedOffsets.has(addr)) card.classList.add('selected');
+            else card.classList.remove('selected');
         }
     }
-    
     updateSelectedCount();
 }
 
@@ -263,10 +276,7 @@ function selectAllOnPage() {
     const start = (currentPage - 1) * itemsPerPage;
     const end = start + itemsPerPage;
     const pageOffsets = allOffsets.slice(start, end);
-    
-    for (const item of pageOffsets) {
-        selectedOffsets.add(item.addr);
-    }
+    for (const item of pageOffsets) selectedOffsets.add(item.addr);
     displayPage();
     updateSelectedCount();
 }
@@ -283,33 +293,87 @@ function updateSelectedCount() {
 
 function generateSelectedOffsets() {
     if (selectedOffsets.size === 0) {
-        document.getElementById('status').innerHTML = '[ERROR] No offsets selected. Click on offsets to select them.';
+        document.getElementById('status').innerHTML = '[ERROR] No offsets selected.';
         return;
     }
-    
     const selectedItems = allOffsets.filter(item => selectedOffsets.has(item.addr));
-    
     let output = '// ============ SELECTED OFFSETS ============\n\n';
-    output += `// Total selected: ${selectedItems.length}\n\n`;
-    
     for (const item of selectedItems) {
-        let name = '';
-        if (item.funcName && item.funcName !== 'get_Position' && item.funcName !== 'get_Rotation') {
-            name = item.funcName.toUpperCase();
-        } else if (item.className) {
-            name = item.className.toUpperCase() + '_' + item.addr.substring(2);
-        } else {
-            name = 'OFFSET_' + item.addr.substring(2);
-        }
+        let name = item.funcName ? item.funcName.toUpperCase() : (item.className ? item.className.toUpperCase() + '_' + item.addr.substring(2) : 'OFFSET_' + item.addr.substring(2));
         output += `#define ${name}    ${item.addr}\n`;
     }
-    
-    output += '\n// ============ USAGE ============\n';
-    output += '// Copy these #defines into your Tweak.xm file\n';
-    output += '// Rename them to meaningful names like OFFSET_GET_POSITION, OFFSET_GET_LOCAL_PLAYER, etc.\n';
-    
     document.getElementById('outputOffsets').value = output;
     document.getElementById('status').innerHTML = `[SUCCESS] ${selectedItems.length} offsets generated.`;
+}
+
+function smartGuess() {
+    const targets = [
+        { name: 'get_LocalPlayer', keywords: ['LocalPlayer', 'localPlayer', 'GetLocalPlayer', 'get_LocalPlayer', 'm_localPlayer', '_localPlayer', 'MyPlayer', 'myPlayer'], returnTypeHint: 'Player' },
+        { name: 'get_Players', keywords: ['get_Players', 'GetPlayers', 'getPlayers', 'Players', 'playerList', 'm_players', '_players', 'GetAllPlayers'], returnTypeHint: 'List' },
+        { name: 'get_Position', keywords: ['get_Position', 'GetPosition', 'get_position', 'position', 'Position', 'get_pos', '_position', 'm_position'], returnTypeHint: 'Vector3' },
+        { name: 'get_Rotation', keywords: ['get_Rotation', 'GetRotation', 'get_rotation', 'rotation', 'Rotation', 'get_rot', '_rotation', 'm_rotation'], returnTypeHint: 'Quaternion' },
+        { name: 'get_Team', keywords: ['get_Team', 'GetTeam', 'get_team', 'team', 'Team', 'teamId', 'TeamId', 'm_team', '_team'], returnTypeHint: 'int' },
+        { name: 'get_Health', keywords: ['get_Health', 'GetHealth', 'get_health', 'health', 'Health', 'currentHealth', 'm_health', '_health'], returnTypeHint: 'float' },
+        { name: 'WorldToScreenPoint', keywords: ['WorldToScreenPoint', 'WorldToScreen', 'worldToScreen', 'WorldToScreenPoint_Injected'], returnTypeHint: 'Vector3' },
+        { name: 'Camera_get_main', keywords: ['get_main', 'GetMain', 'mainCamera', 'MainCamera', 'Camera.main', 'get_mainCamera'], returnTypeHint: 'Camera' }
+    ];
+    
+    suggestions = {};
+    for (const target of targets) {
+        let bestMatch = null;
+        let bestScore = 0;
+        for (const item of allOffsets) {
+            let score = 0;
+            const context = (item.line + ' ' + item.prevLine + ' ' + item.className + ' ' + item.funcName).toLowerCase();
+            for (const kw of target.keywords) {
+                if (context.includes(kw.toLowerCase())) score += 10;
+            }
+            if (item.returnType && target.returnTypeHint && item.returnType.toLowerCase().includes(target.returnTypeHint.toLowerCase())) score += 20;
+            if (item.funcName && target.keywords.some(kw => item.funcName.toLowerCase().includes(kw.toLowerCase()))) score += 30;
+            if (score > bestScore) {
+                bestScore = score;
+                bestMatch = item;
+            }
+        }
+        if (bestMatch && bestScore > 0) {
+            suggestions[target.name] = bestMatch;
+        }
+    }
+    
+    // Display suggestions
+    const panel = document.getElementById('suggestionsPanel');
+    const listDiv = document.getElementById('suggestionsList');
+    let html = '';
+    for (const [name, item] of Object.entries(suggestions)) {
+        html += `<div class="suggestion-item" onclick="selectSuggestion('${name}')">
+            <span class="suggestion-label">${name}</span> → <span style="color:#0f0;">${item.addr}</span>
+            <div style="font-size:10px; color:#666;">${item.line.substring(0, 100)}</div>
+        </div>`;
+    }
+    if (html === '') html = '<p>No strong matches found. Try manual selection.</p>';
+    listDiv.innerHTML = html;
+    panel.style.display = 'block';
+    document.getElementById('status').innerHTML = '[INFO] Smart guess completed. Click on a suggestion to select that offset.';
+}
+
+function selectSuggestion(funcName) {
+    const item = suggestions[funcName];
+    if (item) {
+        selectedOffsets.add(item.addr);
+        // Refresh current page to highlight
+        displayPage();
+        updateSelectedCount();
+        document.getElementById('status').innerHTML = `[INFO] Added ${funcName} offset ${item.addr} to selection.`;
+    }
+}
+
+function applySuggestedOffsets() {
+    for (const item of Object.values(suggestions)) {
+        selectedOffsets.add(item.addr);
+    }
+    displayPage();
+    updateSelectedCount();
+    document.getElementById('status').innerHTML = `[SUCCESS] Applied all ${Object.keys(suggestions).length} suggested offsets.`;
 }
 
 function escapeHtml(text) {
