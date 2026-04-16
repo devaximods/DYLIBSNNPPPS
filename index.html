@@ -49,17 +49,17 @@
             <div style="margin-top:15px;">
                 <label style="color:#fff;">API Provider</label>
                 <select id="apiProvider" onchange="updateApiKeyPlaceholder()">
+                    <option value="groq">Groq (Llama 3 - free)</option>
                     <option value="deepseek">DeepSeek (recommended)</option>
                     <option value="openai">OpenAI (GPT-3.5/4)</option>
-                    <option value="groq">Groq (Mixtral - free tier)</option>
                     <option value="openrouter">OpenRouter (multiple models)</option>
                 </select>
             </div>
             
             <div style="margin-top:10px;">
                 <label style="color:#fff;">API Key</label>
-                <input type="password" id="apiKey" placeholder="sk-...">
-                <div class="info-text" style="color:#666; font-size:11px;" id="apiHint">Get at platform.deepseek.com</div>
+                <input type="password" id="apiKey" placeholder="...">
+                <div class="info-text" style="color:#666; font-size:11px;" id="apiHint">Get at console.groq.com (free)</div>
             </div>
             
             <div style="margin-top:10px;">
@@ -101,6 +101,10 @@ function updateApiKeyPlaceholder() {
     const modelInput = document.getElementById('model');
     
     switch(provider) {
+        case 'groq':
+            hint.innerHTML = 'Get at console.groq.com (free) - use Llama 3';
+            modelInput.placeholder = 'llama3-70b-8192 (default)';
+            break;
         case 'deepseek':
             hint.innerHTML = 'Get at platform.deepseek.com (add $5 credits)';
             modelInput.placeholder = 'deepseek-chat (default)';
@@ -108,10 +112,6 @@ function updateApiKeyPlaceholder() {
         case 'openai':
             hint.innerHTML = 'Get at platform.openai.com/api-keys';
             modelInput.placeholder = 'gpt-3.5-turbo (default)';
-            break;
-        case 'groq':
-            hint.innerHTML = 'Get at console.groq.com (free tier available)';
-            modelInput.placeholder = 'mixtral-8x7b-32768 (default)';
             break;
         case 'openrouter':
             hint.innerHTML = 'Get at openrouter.io/keys';
@@ -127,18 +127,18 @@ function getApiEndpoint() {
         case 'openai': return 'https://api.openai.com/v1/chat/completions';
         case 'groq': return 'https://api.groq.com/openai/v1/chat/completions';
         case 'openrouter': return 'https://openrouter.ai/api/v1/chat/completions';
-        default: return 'https://api.deepseek.com/v1/chat/completions';
+        default: return 'https://api.groq.com/openai/v1/chat/completions';
     }
 }
 
 function getDefaultModel() {
     const provider = document.getElementById('apiProvider').value;
     switch(provider) {
+        case 'groq': return 'llama3-70b-8192';
         case 'deepseek': return 'deepseek-chat';
         case 'openai': return 'gpt-3.5-turbo';
-        case 'groq': return 'mixtral-8x7b-32768';
         case 'openrouter': return 'openai/gpt-3.5-turbo';
-        default: return 'deepseek-chat';
+        default: return 'llama3-70b-8192';
     }
 }
 
@@ -171,8 +171,8 @@ async function startAIAnalysis() {
     document.getElementById('bytesRead').innerHTML = '0 MB';
     document.getElementById('status').innerHTML = `[STATUS] Loading file...`;
     
-    // Read first 200KB for AI (to avoid token limits)
-    const chunkSize = 200 * 1024;
+    // Read first 150KB for AI (to avoid token limits)
+    const chunkSize = 150 * 1024;
     const chunk = file.slice(0, chunkSize);
     const reader = new FileReader();
     
@@ -211,7 +211,7 @@ async function startAIAnalysis() {
 7. WorldToScreenPoint - converts 3D to 2D screen coordinates
 8. Camera.get_main - returns the main camera
 
-The dump is obfuscated. Look for RVA or Offset: 0x... patterns near these functions.
+The dump may be obfuscated. Look for RVA or Offset: 0x... patterns near these functions.
 Return ONLY valid JSON in this exact format:
 {
   "get_LocalPlayer_offset": "0x00000000",
@@ -228,7 +228,7 @@ If you cannot find an offset, use "0x00000000".
 
 Classes found in this dump: ${classes.join(', ')}
 
-Dump sample:
+Dump sample (first 25000 chars):
 ${sample.substring(0, 25000)}`;
 
         try {
@@ -268,9 +268,11 @@ ${sample.substring(0, 25000)}`;
                 if (response.status === 401) {
                     throw new Error('Invalid API key');
                 } else if (response.status === 402) {
-                    throw new Error('Insufficient credits. Add credits to your account or use Groq (free tier)');
+                    throw new Error('Insufficient credits. Use Groq (free) or add credits');
+                } else if (response.status === 429) {
+                    throw new Error('Rate limit exceeded. Try again in a few seconds');
                 } else {
-                    throw new Error(`HTTP ${response.status}: ${errorText.substring(0, 100)}`);
+                    throw new Error(`HTTP ${response.status}: ${errorText.substring(0, 150)}`);
                 }
             }
             
