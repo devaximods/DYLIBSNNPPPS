@@ -6,33 +6,73 @@
 <title>NEXUS - Dump Searcher</title>
 
 <style>
-* { margin: 0; padding: 0; box-sizing: border-box; }
-body { background: #000000; font-family: 'Courier New', monospace; min-height: 100vh; padding: 20px; }
-.container { max-width: 1400px; margin: 0 auto; }
-.header { text-align: center; margin-bottom: 30px; padding-bottom: 20px; border-bottom: 1px solid #333; }
-.header h1 { color: #fff; font-size: 1.8em; letter-spacing: 2px; }
-.header p { color: #666; margin-top: 10px; }
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:#000; font-family:'Courier New', monospace; padding:20px; }
 
-.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-.panel { background: #0a0a0a; border: 1px solid #333; padding: 20px; }
+.container { max-width:1400px; margin:auto; }
 
-.search-box { width: 100%; padding: 10px; background: #000; color: #0f0; border: 1px solid #333; margin-bottom: 10px; }
-select { width: 100%; padding: 10px; background: #000; color: #0f0; border: 1px solid #333; margin-bottom: 10px; }
+.header { text-align:center; margin-bottom:20px; border-bottom:1px solid #333; padding-bottom:15px; }
+.header h1 { color:#fff; letter-spacing:2px; font-size:1.8em; }
+.header p { color:#666; margin-top:8px; }
 
-.results-list { max-height: 500px; overflow-y: auto; background: #000; border: 1px solid #333; }
-.result-line { padding: 8px; border-bottom: 1px solid #333; cursor: pointer; }
-.result-line:hover { background: #1a1a1a; }
-.selected { background: #0a3a0a; }
+.grid { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
 
-.result-addr { color: #0f0; font-weight: bold; }
-.type { color:#4da6ff; }
-.class { color:#ffaa00; }
+.panel { background:#0a0a0a; border:1px solid #333; padding:20px; }
 
-button { background:#111; color:#fff; border:1px solid #333; padding:10px; margin-top:10px; cursor:pointer; }
+input, select {
+width:100%;
+padding:10px;
+margin-top:10px;
+background:#000;
+color:#0f0;
+border:1px solid #333;
+font-family:monospace;
+}
+
+.results-list {
+margin-top:10px;
+height:420px;
+overflow:auto;
+border:1px solid #333;
+background:#000;
+}
+
+.result-line {
+padding:6px;
+border-bottom:1px solid #222;
+cursor:pointer;
+}
+
+.result-line:hover { background:#111; }
+
+.selected { background:#0a3a0a; }
+
+.class { color:#ffaa00; margin-right:5px; }
+.type { color:#4da6ff; margin-right:5px; }
+.result-addr { color:#0f0; margin-left:10px; }
+
+button {
+background:#111;
+color:#fff;
+border:1px solid #333;
+padding:10px;
+margin-top:10px;
+cursor:pointer;
+}
+
 button:hover { background:#222; }
 
-textarea { width:100%; margin-top:15px; background:#000; color:#0f0; border:1px solid #333; padding:10px; }
+textarea {
+width:100%;
+margin-top:15px;
+height:200px;
+background:#000;
+color:#0f0;
+border:1px solid #333;
+padding:10px;
+}
 </style>
+
 </head>
 
 <body>
@@ -41,23 +81,27 @@ textarea { width:100%; margin-top:15px; background:#000; color:#0f0; border:1px 
 
 <div class="header">
 <h1>NEXUS DUMP SEARCHER</h1>
-<p>Fast & Clean Dump Analyzer</p>
+<p>Fast reverse tool</p>
 </div>
 
 <div class="grid">
 
 <div class="panel">
-<h3>LOAD FILE</h3>
+<h3 style="color:#fff;">FILE</h3>
 <input type="file" id="dumpFile">
-<p id="status" style="color:#666; margin-top:10px;">Idle</p>
+
+<p id="status" style="color:#666;margin-top:10px;">Idle</p>
 <p id="lineCount" style="color:#0f0;">0 lines</p>
 </div>
 
 <div class="panel">
-<h3>SEARCH</h3>
+<h3 style="color:#fff;">SEARCH</h3>
 
-<input type="text" id="searchInput" class="search-box" placeholder="Search (ex: get_Position)">
-<select id="typeFilter"></select>
+<input type="text" id="searchInput" placeholder="Search..." oninput="filterLines()">
+
+<select id="typeFilter" onchange="filterLines()">
+<option value="">All types</option>
+</select>
 
 <div id="resultsList" class="results-list"></div>
 
@@ -68,144 +112,160 @@ textarea { width:100%; margin-top:15px; background:#000; color:#0f0; border:1px 
 
 </div>
 
-<textarea id="outputOffsets" rows="8" placeholder="Offsets output..."></textarea>
+<textarea id="outputOffsets" placeholder="Offsets output..."></textarea>
 
 </div>
 
 <script>
+
 let parsedData = [];
-let filtered = [];
-let selected = new Set();
+let filteredLines = [];
+let selectedIndices = new Set();
 
-document.getElementById('dumpFile').addEventListener('change', loadDump);
-document.getElementById('searchInput').addEventListener('input', filter);
-document.getElementById('typeFilter').addEventListener('change', filter);
+/* LOAD FILE */
+document.getElementById("dumpFile").addEventListener("change", loadDump);
 
-function loadDump(){
-    const file = document.getElementById('dumpFile').files[0];
-    if(!file) return;
+function loadDump(e){
+const file = e.target.files[0];
+if(!file) return;
 
-    const reader = new FileReader();
+const reader = new FileReader();
 
-    document.getElementById('status').innerText = "Loading...";
+document.getElementById("status").innerText = "Loading...";
 
-    reader.onload = function(e){
-        const lines = e.target.result.split("\n");
+reader.onload = function(ev){
 
-        parse(lines);
-        buildTypes();
+const lines = ev.target.result.split("\n");
 
-        document.getElementById('status').innerText = "Ready";
-        document.getElementById('lineCount').innerText = lines.length + " lines";
+parseDump(lines);
+buildTypes();
 
-        filter();
-    };
+document.getElementById("status").innerText = "Ready";
+document.getElementById("lineCount").innerText = lines.length + " lines";
 
-    reader.readAsText(file);
+filterLines();
+};
+
+reader.readAsText(file);
 }
 
-function parse(lines){
-    parsedData = [];
-    let currentClass = "GLOBAL";
+/* PARSE */
+function parseDump(lines){
+parsedData = [];
 
-    const regex = /public\s+([\w<>]+)\s+(\w+)\(.*?\).*?RVA:\s*(0x[0-9A-Fa-f]+)/;
+let currentClass = "GLOBAL";
 
-    for(let i=0;i<lines.length;i++){
-        let line = lines[i];
+const regex = /public\s+([\w<>]+)\s+(\w+)\(.*?\).*?RVA:\s*(0x[0-9A-Fa-f]+)/;
 
-        if(line.includes("class ")){
-            let c = line.match(/class\s+(\w+)/);
-            if(c) currentClass = c[1];
-        }
+for(let i=0;i<lines.length;i++){
+let line = lines[i];
 
-        if(line.includes("RVA")){
-            let m = regex.exec(line);
-            if(m){
-                parsedData.push({
-                    class: currentClass,
-                    type: m[1],
-                    name: m[2],
-                    rva: m[3],
-                    index: i
-                });
-            }
-        }
-    }
+if(line.includes("class ")){
+let c = line.match(/class\s+(\w+)/);
+if(c) currentClass = c[1];
 }
 
+if(line.includes("RVA")){
+let m = regex.exec(line);
+if(m){
+parsedData.push({
+class: currentClass,
+type: m[1],
+name: m[2],
+rva: m[3],
+index: i
+});
+}
+}
+}
+}
+
+/* TYPES */
 function buildTypes(){
-    const select = document.getElementById('typeFilter');
-    const types = [...new Set(parsedData.map(x=>x.type))];
+const sel = document.getElementById("typeFilter");
 
-    select.innerHTML = '<option value="">All Types</option>';
+const types = [...new Set(parsedData.map(x=>x.type))];
 
-    types.forEach(t=>{
-        let o=document.createElement("option");
-        o.value=t;
-        o.textContent=t;
-        select.appendChild(o);
-    });
+sel.innerHTML = '<option value="">All types</option>';
+
+types.forEach(t=>{
+let o=document.createElement("option");
+o.value=t;
+o.textContent=t;
+sel.appendChild(o);
+});
 }
 
-function filter(){
-    const search = document.getElementById('searchInput').value.toLowerCase();
-    const type = document.getElementById('typeFilter').value;
+/* FILTER */
+function filterLines(){
+const search = document.getElementById("searchInput").value.toLowerCase();
+const type = document.getElementById("typeFilter").value;
 
-    filtered = parsedData.filter(x=>{
-        return (!search || x.name.toLowerCase().includes(search))
-        && (!type || x.type===type);
-    });
+filteredLines = parsedData.filter(x=>{
+return (!search || x.name.toLowerCase().includes(search))
+&& (!type || x.type===type);
+});
 
-    filtered.sort((a,b)=>parseInt(a.rva)-parseInt(b.rva));
-
-    render();
+render();
 }
 
+/* RENDER */
 function render(){
-    const div = document.getElementById('resultsList');
-    div.innerHTML = "";
+const div = document.getElementById("resultsList");
+div.innerHTML = "";
 
-    filtered.forEach(item=>{
-        const el = document.createElement("div");
-
-        el.className = "result-line" + (selected.has(item.index)?" selected":"");
-
-        el.innerHTML = `
-        <span class="class">${item.class}</span>
-        <span class="type">${item.type}</span>
-        <span>${item.name}</span>
-        <span class="result-addr">${item.rva}</span>
-        `;
-
-        el.onclick = ()=>{
-            if(selected.has(item.index)) selected.delete(item.index);
-            else selected.add(item.index);
-            render();
-        };
-
-        el.ondblclick = ()=>navigator.clipboard.writeText(item.rva);
-
-        div.appendChild(el);
-    });
+if(filteredLines.length === 0){
+div.innerHTML = '<p style="color:#666;padding:20px;">No results</p>';
+return;
 }
 
+for(const item of filteredLines){
+
+const el = document.createElement("div");
+el.className = "result-line" + (selectedIndices.has(item.index) ? " selected" : "");
+
+el.innerHTML = `
+<span class="class">${item.class}</span>
+<span class="type">${item.type}</span>
+<span>${item.name}</span>
+<span class="result-addr">${item.rva}</span>
+`;
+
+el.onclick = ()=>{
+if(selectedIndices.has(item.index)) selectedIndices.delete(item.index);
+else selectedIndices.add(item.index);
+render();
+};
+
+el.ondblclick = ()=>{
+navigator.clipboard.writeText(item.rva);
+};
+
+div.appendChild(el);
+}
+}
+
+/* CLEAR */
 function clearSelection(){
-    selected.clear();
-    render();
+selectedIndices.clear();
+render();
 }
 
+/* EXPORT */
 function generateOffsets(){
-    let out = "// OFFSETS\n\n";
 
-    parsedData
-    .filter(x=>selected.has(x.index))
-    .forEach(x=>{
-        out += `// ${x.class} :: ${x.type} ${x.name}\n`;
-        out += `#define ${x.class}_${x.name}`.toUpperCase() + ` ${x.rva}\n\n`;
-    });
+let out = "// OFFSETS\n\n";
 
-    document.getElementById('outputOffsets').value = out;
+const sel = parsedData.filter(x=>selectedIndices.has(x.index));
+
+for(const x of sel){
+out += `// ${x.class} :: ${x.type} ${x.name}\n`;
+out += `#define ${x.class}_${x.name}`.toUpperCase() + ` ${x.rva}\n\n`;
 }
+
+document.getElementById("outputOffsets").value = out;
+}
+
 </script>
 
 </body>
