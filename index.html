@@ -1,316 +1,165 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NEXUS - Dump Searcher</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { background: #000000; font-family: 'Courier New', monospace; min-height: 100vh; padding: 20px; }
-        .container { max-width: 1400px; margin: 0 auto; }
-        .header { text-align: center; margin-bottom: 30px; padding-bottom: 20px; border-bottom: 1px solid #333; }
-        .header h1 { color: #fff; font-size: 1.8em; font-weight: normal; letter-spacing: 2px; }
-        .header p { color: #666; margin-top: 10px; }
-        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-        @media (max-width: 768px) { .grid { grid-template-columns: 1fr; } }
-        .panel { background: #0a0a0a; border: 1px solid #333; padding: 20px; }
-        .panel h3 { color: #fff; margin-bottom: 15px; font-weight: normal; }
-        button { background: #111; color: #fff; border: 1px solid #333; padding: 12px 24px; cursor: pointer; font-family: monospace; margin-top: 10px; margin-right: 10px; }
-        button:hover { background: #222; border-color: #fff; }
-        .status { margin-top: 15px; padding: 12px; background: #0a0a0a; border-left: 2px solid #fff; color: #ccc; font-size: 12px; max-height: 150px; overflow-y: auto; }
-        .file-zone { border: 1px dashed #333; padding: 30px; text-align: center; margin-bottom: 15px; cursor: pointer; transition: all 0.2s; }
-        .file-zone:hover { border-color: #0f0; background: #0a0a0a; }
-        .progress-container { width: 100%; background: #1a1a1a; margin-top: 10px; position: relative; }
-        .progress-bar { width: 0%; height: 20px; background: #0f0; transition: width 0.3s; }
-        .progress-text { position: absolute; top: 2px; left: 10px; color: #000; font-size: 11px; font-weight: bold; }
-        .search-box { width: 100%; padding: 10px; background: #000; color: #0f0; border: 1px solid #333; font-family: monospace; font-size: 14px; margin-bottom: 15px; }
-        .results-list { max-height: 500px; overflow-y: auto; background: #000; border: 1px solid #333; }
-        .result-line { padding: 8px; border-bottom: 1px solid #333; font-family: monospace; font-size: 11px; cursor: pointer; }
-        .result-line:hover { background: #1a1a1a; }
-        .result-line.selected { background: #0a3a0a; border-left: 2px solid #0f0; }
-        .result-addr { color: #0f0; font-weight: bold; }
-        .offset-badge { background: #0a0a0a; border: 1px solid #333; padding: 2px 6px; font-size: 10px; color: #ff0; margin-left: 5px; }
-        .selected-panel { background: #0a0a0a; border: 1px solid #333; padding: 15px; margin-top: 15px; max-height: 300px; overflow-y: auto; }
-    </style>
+<meta charset="UTF-8">
+<title>NEXUS PRO - Dump Analyzer</title>
+
+<style>
+body { background:#000; color:#0f0; font-family:monospace; padding:20px; }
+.container { max-width:1400px; margin:auto; }
+input, select, button { background:#000; color:#0f0; border:1px solid #333; padding:8px; margin:5px; }
+button:hover { background:#111; cursor:pointer; }
+.results { height:400px; overflow:auto; border:1px solid #333; }
+.line { padding:5px; border-bottom:1px solid #222; cursor:pointer; }
+.line:hover { background:#111; }
+.selected { background:#0a3a0a; }
+.rva { color:#ff4d4d; font-weight:bold; margin-left:10px; }
+.type { color:#4da6ff; margin-right:5px; }
+.class { color:#ffaa00; margin-right:5px; }
+</style>
 </head>
+
 <body>
 <div class="container">
-    <div class="header">
-        <h1>NEXUS DUMP SEARCHER</h1>
-        <p>Search through your dump lines in real-time | Type to filter</p>
-    </div>
-    
-    <div class="grid">
-        <div class="panel">
-            <h3>DUMP.CS FILE</h3>
-            <div class="file-zone" onclick="document.getElementById('dumpFile').click()">
-                <p>📁 CLICK TO SELECT DUMP.CS FILE</p>
-            </div>
-            <input type="file" id="dumpFile" accept=".cs,.txt" style="display:none;" onchange="loadDump()">
-            
-            <div class="progress-container" style="margin-top:15px;">
-                <div class="progress-bar" id="progressBar"></div>
-                <div class="progress-text" id="progressText">0%</div>
-            </div>
-            
-            <div style="margin-top:10px;">
-                <span id="scanStatus" style="color:#ff0;">● IDLE</span>
-                <span id="bytesRead" style="color:#666; margin-left:10px;">0 MB</span>
-                <span id="lineCount" style="color:#0f0; margin-left:10px;">0 lines</span>
-            </div>
-        </div>
-        
-        <div class="panel">
-            <h3>🔍 SEARCH LINES</h3>
-            <input type="text" id="searchInput" class="search-box" placeholder="Type to search... (ex: get_, Vector3, Player, 0x)" oninput="filterLines()">
-            <div id="resultsList" class="results-list" style="height: 400px;">
-                <p style="color:#666; padding:20px; text-align:center;">Load a dump.cs file first</p>
-            </div>
-            <div style="margin-top:10px;">
-                <span id="resultCount" style="color:#666;">0 lines</span>
-                <button onclick="selectAllFiltered()">SELECT ALL FILTERED</button>
-                <button onclick="clearSelection()">CLEAR SELECTION</button>
-                <button onclick="generateOffsets()">GENERATE OFFSETS</button>
-            </div>
-        </div>
-    </div>
-    
-    <div id="selectedPanel" class="selected-panel" style="display:none;">
-        <h3 style="color:#0f0;">📋 SELECTED LINES</h3>
-        <div id="selectedList"></div>
-        <button onclick="copySelectedToClipboard()">COPY SELECTED TO CLIPBOARD</button>
-    </div>
-    
-    <textarea id="outputOffsets" rows="6" readonly placeholder="Generated offsets will appear here..." style="margin-top:15px; width:100%; background:#000; color:#0f0; border:1px solid #333; padding:10px; font-family:monospace;"></textarea>
+
+<h2>NEXUS PRO - Dump Analyzer</h2>
+
+<input type="file" id="file">
+
+<br>
+
+<input type="text" id="search" placeholder="Search name...">
+<select id="typeFilter"><option value="">All types</option></select>
+
+<br>
+
+<button onclick="exportSelected()">EXPORT</button>
+<button onclick="clearSelection()">CLEAR</button>
+
+<div id="results" class="results"></div>
+
+<textarea id="output" style="width:100%; height:200px;"></textarea>
+
 </div>
 
 <script>
-let allLines = [];
-let filteredLines = [];
-let selectedIndices = new Set();
-let currentFile = null;
+let parsed = [];
+let filtered = [];
+let selected = new Set();
+let favorites = JSON.parse(localStorage.getItem("fav")||"[]");
 
-function loadDump() {
-    const file = document.getElementById('dumpFile').files[0];
-    if (!file) return;
-    
-    currentFile = file;
-    allLines = [];
-    filteredLines = [];
-    selectedIndices.clear();
-    
-    document.getElementById('resultsList').innerHTML = '<p style="color:#666; padding:20px; text-align:center;">Loading...</p>';
-    document.getElementById('searchInput').value = '';
-    document.getElementById('outputOffsets').value = '';
-    document.getElementById('selectedPanel').style.display = 'none';
-    document.getElementById('progressBar').style.width = '0%';
-    document.getElementById('progressText').innerHTML = '0%';
-    document.getElementById('scanStatus').innerHTML = '● LOADING';
-    document.getElementById('bytesRead').innerHTML = '0 MB';
-    document.getElementById('lineCount').innerHTML = '0 lines';
-    document.getElementById('status').innerHTML = `[STATUS] Loading ${file.name}...`;
-    
-    const chunkSize = 1024 * 1024 * 5;
-    let offset = 0;
-    let leftover = '';
-    let totalLines = 0;
-    
-    function processNextChunk() {
-        const chunk = file.slice(offset, offset + chunkSize);
-        const reader = new FileReader();
-        
-        reader.onload = function(e) {
-            let text = leftover + e.target.result;
-            const lines = text.split('\n');
-            leftover = lines.pop();
-            
-            for (const line of lines) {
-                allLines.push(line);
-                totalLines++;
-            }
-            
-            offset += chunkSize;
-            const percent = Math.min(100, (offset / file.size) * 100);
-            document.getElementById('progressBar').style.width = `${percent}%`;
-            document.getElementById('progressText').innerHTML = `${Math.round(percent)}%`;
-            document.getElementById('bytesRead').innerHTML = `${(offset / 1024 / 1024).toFixed(1)} MB`;
-            document.getElementById('lineCount').innerHTML = `${totalLines.toLocaleString()} lines`;
-            
-            if (offset < file.size) {
-                setTimeout(processNextChunk, 5);
-            } else {
-                if (leftover.trim()) allLines.push(leftover);
-                document.getElementById('scanStatus').innerHTML = '● READY';
-                document.getElementById('progressBar').style.width = '100%';
-                document.getElementById('progressText').innerHTML = '100%';
-                document.getElementById('status').innerHTML = `[READY] ${allLines.length.toLocaleString()} lines loaded. Start searching.`;
-                document.getElementById('resultsList').innerHTML = '<p style="color:#666; padding:20px; text-align:center;">Type something in the search box</p>';
-                document.getElementById('searchInput').disabled = false;
-                document.getElementById('searchInput').placeholder = 'Type to search... (ex: get_, Vector3, Player, 0x)';
-            }
-        };
-        
-        reader.onerror = function() {
-            document.getElementById('status').innerHTML = '[ERROR] Failed to read file';
-        };
-        
-        reader.readAsText(chunk);
-    }
-    
-    processNextChunk();
+document.getElementById("file").addEventListener("change", loadFile);
+document.getElementById("search").addEventListener("input", render);
+document.getElementById("typeFilter").addEventListener("change", render);
+
+function loadFile(e){
+    const file = e.target.files[0];
+    const reader = new FileReader();
+
+    reader.onload = function(ev){
+        const lines = ev.target.result.split("\n");
+        parse(lines);
+        buildTypes();
+        render();
+    };
+
+    reader.readAsText(file);
 }
 
-function filterLines() {
-    const searchTerm = document.getElementById('searchInput').value;
-    const resultsDiv = document.getElementById('resultsList');
-    const resultCountSpan = document.getElementById('resultCount');
-    
-    if (!searchTerm.trim()) {
-        filteredLines = [];
-        resultsDiv.innerHTML = '<p style="color:#666; padding:20px; text-align:center;">Type something to search</p>';
-        resultCountSpan.innerHTML = '0 lines';
-        return;
-    }
-    
-    const term = searchTerm.toLowerCase();
-    filteredLines = [];
-    
-    for (let i = 0; i < allLines.length; i++) {
-        if (allLines[i].toLowerCase().includes(term)) {
-            filteredLines.push({ index: i, line: allLines[i] });
+function parse(lines){
+    parsed = [];
+    let currentClass = "GLOBAL";
+
+    const regex = /public\s+([\w<>]+)\s+(\w+)\(.*?\).*?RVA:\s*(0x[0-9A-Fa-f]+)/;
+
+    for(let i=0;i<lines.length;i++){
+        let line = lines[i];
+
+        if(line.includes("class ")){
+            let m = line.match(/class\s+(\w+)/);
+            if(m) currentClass = m[1];
+        }
+
+        if(line.includes("RVA")){
+            let m = regex.exec(line);
+            if(m){
+                parsed.push({
+                    type:m[1],
+                    name:m[2],
+                    rva:m[3],
+                    class:currentClass,
+                    index:i
+                });
+            }
         }
     }
-    
-    resultCountSpan.innerHTML = `${filteredLines.length} lines`;
-    
-    if (filteredLines.length === 0) {
-        resultsDiv.innerHTML = '<p style="color:#666; padding:20px; text-align:center;">No results found</p>';
-        return;
-    }
-    
-    let html = '';
-    for (const item of filteredLines) {
-        const isSelected = selectedIndices.has(item.index);
-        // Highlight the search term
-        let displayLine = item.line;
-        const regex = new RegExp(`(${searchTerm})`, 'gi');
-        displayLine = displayLine.replace(regex, '<span style="background:#0a3a0a; color:#0f0;">$1</span>');
-        
-        // Extract offset if present
-        const offsetMatch = item.line.match(/(?:RVA|Offset):\s*(0x[0-9A-Fa-f]+)/i);
-        const offsetBadge = offsetMatch ? `<span class="offset-badge">${offsetMatch[1]}</span>` : '';
-        
-        html += `<div class="result-line ${isSelected ? 'selected' : ''}" onclick="toggleSelectLine(${item.index})">
-            <span style="color:#666;">${item.index}:</span> ${offsetBadge} ${displayLine.substring(0, 200)}${displayLine.length > 200 ? '...' : ''}
-        </div>`;
-    }
-    
-    resultsDiv.innerHTML = html;
 }
 
-function toggleSelectLine(index) {
-    if (selectedIndices.has(index)) {
-        selectedIndices.delete(index);
-    } else {
-        selectedIndices.add(index);
-    }
-    filterLines(); // Refresh display
-    updateSelectedPanel();
-}
-
-function selectAllFiltered() {
-    for (const item of filteredLines) {
-        selectedIndices.add(item.index);
-    }
-    filterLines();
-    updateSelectedPanel();
-}
-
-function clearSelection() {
-    selectedIndices.clear();
-    filterLines();
-    updateSelectedPanel();
-}
-
-function updateSelectedPanel() {
-    const panel = document.getElementById('selectedPanel');
-    const listDiv = document.getElementById('selectedList');
-    
-    if (selectedIndices.size === 0) {
-        panel.style.display = 'none';
-        return;
-    }
-    
-    panel.style.display = 'block';
-    let html = '';
-    const selectedLines = [];
-    for (const idx of selectedIndices) {
-        selectedLines.push({ index: idx, line: allLines[idx] });
-    }
-    selectedLines.sort((a, b) => a.index - b.index);
-    
-    for (const item of selectedLines) {
-        const offsetMatch = item.line.match(/(?:RVA|Offset):\s*(0x[0-9A-Fa-f]+)/i);
-        const offsetBadge = offsetMatch ? `<span class="offset-badge">${offsetMatch[1]}</span>` : '';
-        html += `<div style="padding:5px; border-bottom:1px solid #333; font-size:11px;">
-            <span style="color:#666;">${item.index}:</span> ${offsetBadge} ${escapeHtml(item.line.substring(0, 150))}
-            <button onclick="removeSelected(${item.index})" style="float:right; background:#330000; padding:2px 8px;">✕</button>
-        </div>`;
-    }
-    listDiv.innerHTML = html;
-}
-
-function removeSelected(index) {
-    selectedIndices.delete(index);
-    updateSelectedPanel();
-    filterLines();
-}
-
-function generateOffsets() {
-    if (selectedIndices.size === 0) {
-        document.getElementById('status').innerHTML = '[ERROR] No lines selected. Click on lines to select them.';
-        return;
-    }
-    
-    let output = '// ============ SELECTED OFFSETS ============\n\n';
-    output += `// Total selected lines: ${selectedIndices.size}\n\n`;
-    
-    const selectedLines = [];
-    for (const idx of selectedIndices) {
-        selectedLines.push({ index: idx, line: allLines[idx] });
-    }
-    selectedLines.sort((a, b) => a.index - b.index);
-    
-    for (const item of selectedLines) {
-        const offsetMatch = item.line.match(/(?:RVA|Offset):\s*(0x[0-9A-Fa-f]+)/i);
-        if (offsetMatch) {
-            output += `// Line ${item.index}: ${item.line.substring(0, 100)}\n`;
-            output += `#define OFFSET_${offsetMatch[1].substring(2)}    ${offsetMatch[1]}\n\n`;
-        } else {
-            output += `// Line ${item.index}: ${item.line.substring(0, 100)} (no offset found)\n\n`;
-        }
-    }
-    
-    document.getElementById('outputOffsets').value = output;
-    document.getElementById('status').innerHTML = `[SUCCESS] Generated ${selectedIndices.size} offsets from selected lines.`;
-}
-
-function copySelectedToClipboard() {
-    let text = '';
-    for (const idx of selectedIndices) {
-        text += allLines[idx] + '\n';
-    }
-    navigator.clipboard.writeText(text);
-    document.getElementById('status').innerHTML = `[INFO] ${selectedIndices.size} lines copied to clipboard.`;
-}
-
-function escapeHtml(text) {
-    return text.replace(/[&<>]/g, function(m) {
-        if (m === '&') return '&amp;';
-        if (m === '<') return '&lt;';
-        if (m === '>') return '&gt;';
-        return m;
+function buildTypes(){
+    const types = [...new Set(parsed.map(x=>x.type))];
+    const sel = document.getElementById("typeFilter");
+    sel.innerHTML = '<option value="">All types</option>';
+    types.forEach(t=>{
+        let o=document.createElement("option");
+        o.value=t; o.textContent=t;
+        sel.appendChild(o);
     });
+}
+
+function render(){
+    const search = document.getElementById("search").value.toLowerCase();
+    const type = document.getElementById("typeFilter").value;
+
+    filtered = parsed.filter(x=>{
+        return (!search || x.name.toLowerCase().includes(search))
+        && (!type || x.type===type);
+    });
+
+    filtered.sort((a,b)=>parseInt(a.rva)-parseInt(b.rva));
+
+    const div = document.getElementById("results");
+    div.innerHTML = "";
+
+    filtered.forEach(item=>{
+        const el = document.createElement("div");
+        el.className = "line" + (selected.has(item.index)?" selected":"");
+
+        el.innerHTML = `
+            <span class="class">${item.class}</span>
+            <span class="type">${item.type}</span>
+            <span>${item.name}</span>
+            <span class="rva">${item.rva}</span>
+        `;
+
+        el.onclick = ()=>toggle(item.index);
+        el.ondblclick = ()=>navigator.clipboard.writeText(item.rva);
+
+        div.appendChild(el);
+    });
+}
+
+function toggle(i){
+    if(selected.has(i)) selected.delete(i);
+    else selected.add(i);
+    render();
+}
+
+function clearSelection(){
+    selected.clear();
+    render();
+}
+
+function exportSelected(){
+    let out = "// OFFSETS\n\n";
+
+    const sel = parsed.filter(x=>selected.has(x.index));
+
+    sel.forEach(x=>{
+        out += `// ${x.class} :: ${x.type} ${x.name}\n`;
+        out += `#define ${x.class}_${x.name}`.toUpperCase() + ` ${x.rva}\n\n`;
+    });
+
+    document.getElementById("output").value = out;
 }
 </script>
 </body>
