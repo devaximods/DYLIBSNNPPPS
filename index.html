@@ -3,270 +3,1167 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NEXUS - Dump Searcher</title>
-
+<title>BADOUFLY — Propulsez votre futur</title>
 <style>
-* { margin:0; padding:0; box-sizing:border-box; }
-body { background:#000; font-family:'Courier New', monospace; padding:20px; }
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;500;700&display=swap');
 
-.container { max-width:1400px; margin:auto; }
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
-.header { text-align:center; margin-bottom:20px; border-bottom:1px solid #333; padding-bottom:15px; }
-.header h1 { color:#fff; letter-spacing:2px; font-size:1.8em; }
-.header p { color:#666; margin-top:8px; }
-
-.grid { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
-
-.panel { background:#0a0a0a; border:1px solid #333; padding:20px; }
-
-input, select {
-width:100%;
-padding:10px;
-margin-top:10px;
-background:#000;
-color:#0f0;
-border:1px solid #333;
-font-family:monospace;
+:root {
+  --neon-blue: #00f0ff;
+  --neon-magenta: #ff00ff;
+  --neon-violet: #8b00ff;
+  --deep-space: #0a0a12;
+  --glass-bg: rgba(10, 10, 18, 0.75);
 }
 
-.results-list {
-margin-top:10px;
-height:420px;
-overflow:auto;
-border:1px solid #333;
-background:#000;
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: 'Rajdhani', sans-serif;
+  background: var(--deep-space);
+  color: #e0e0f0;
+  overflow-x: hidden;
+  cursor: crosshair;
 }
 
-.result-line {
-padding:6px;
-border-bottom:1px solid #222;
-cursor:pointer;
+#loader {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: var(--deep-space);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.8s ease, visibility 0.8s ease;
+}
+#loader.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+#loader .loader-text {
+  font-family: 'Orbitron', monospace;
+  font-size: clamp(1rem, 3vw, 2rem);
+  color: var(--neon-blue);
+  text-shadow: 0 0 20px var(--neon-blue), 0 0 60px var(--neon-violet);
+  letter-spacing: 0.5em;
+  animation: loaderPulse 1.2s ease-in-out infinite;
+}
+#loader .progress-bar {
+  width: min(400px, 80vw);
+  height: 3px;
+  background: rgba(255,255,255,0.05);
+  border-radius: 2px;
+  margin-top: 2rem;
+  overflow: hidden;
+}
+#loader .progress-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, var(--neon-blue), var(--neon-magenta));
+  box-shadow: 0 0 20px var(--neon-blue);
+  transition: width 0.3s ease;
 }
 
-.result-line:hover { background:#111; }
-
-.selected { background:#0a3a0a; }
-
-.class { color:#ffaa00; margin-right:5px; }
-.type { color:#4da6ff; margin-right:5px; }
-.result-addr { color:#0f0; margin-left:10px; }
-
-button {
-background:#111;
-color:#fff;
-border:1px solid #333;
-padding:10px;
-margin-top:10px;
-cursor:pointer;
+@keyframes loaderPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
 }
 
-button:hover { background:#222; }
+#canvas-container {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+}
 
-textarea {
-width:100%;
-margin-top:15px;
-height:200px;
-background:#000;
-color:#0f0;
-border:1px solid #333;
-padding:10px;
+canvas { display: block; }
+
+.marquee {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  z-index: 1;
+  overflow: hidden;
+  background: rgba(0,0,0,0.4);
+  backdrop-filter: blur(4px);
+  border-top: 1px solid rgba(0,240,255,0.15);
+  padding: 0.6rem 0;
+}
+.marquee-inner {
+  display: flex;
+  white-space: nowrap;
+  animation: marqueeScroll 30s linear infinite;
+  font-family: 'Orbitron', monospace;
+  font-size: 0.75rem;
+  letter-spacing: 0.3em;
+  color: rgba(0,240,255,0.5);
+}
+.marquee-inner span { margin-right: 4rem; }
+@keyframes marqueeScroll {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+.content {
+  position: relative;
+  z-index: 2;
+}
+
+.hero {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 2rem;
+  position: relative;
+}
+
+.hero-title {
+  font-family: 'Orbitron', sans-serif;
+  font-size: clamp(3rem, 10vw, 9rem);
+  font-weight: 900;
+  letter-spacing: 0.15em;
+  color: #fff;
+  text-shadow:
+    0 0 10px var(--neon-blue),
+    0 0 40px var(--neon-blue),
+    0 0 80px var(--neon-violet),
+    0 0 120px var(--neon-violet);
+  animation: neonFlicker 4s ease-in-out infinite;
+  position: relative;
+}
+.hero-title::after {
+  content: 'BADOUFLY';
+  position: absolute;
+  left: 2px;
+  top: 2px;
+  color: var(--neon-magenta);
+  z-index: -1;
+  animation: glitch 3s ease-in-out infinite;
+  clip-path: inset(0 0 0 0);
+}
+
+@keyframes neonFlicker {
+  0%, 19%, 21%, 23%, 25%, 54%, 56%, 100% {
+    text-shadow:
+      0 0 10px var(--neon-blue),
+      0 0 40px var(--neon-blue),
+      0 0 80px var(--neon-violet),
+      0 0 120px var(--neon-violet);
+    opacity: 1;
+  }
+  20%, 24%, 55% {
+    text-shadow: none;
+    opacity: 0.85;
+  }
+}
+
+@keyframes glitch {
+  0%, 90%, 100% { clip-path: inset(0 0 100% 0); transform: translate(0); }
+  92% { clip-path: inset(20% 0 50% 0); transform: translate(-4px, 2px); }
+  94% { clip-path: inset(60% 0 10% 0); transform: translate(4px, -2px); }
+  96% { clip-path: inset(40% 0 30% 0); transform: translate(-2px, 1px); }
+  98% { clip-path: inset(10% 0 70% 0); transform: translate(2px, -1px); }
+}
+
+.hero-subtitle {
+  font-family: 'Orbitron', sans-serif;
+  font-size: clamp(0.9rem, 2vw, 1.5rem);
+  letter-spacing: 0.5em;
+  color: var(--neon-magenta);
+  margin-top: 1rem;
+  text-shadow: 0 0 15px var(--neon-magenta);
+  opacity: 0;
+  transform: translateY(30px);
+}
+
+.hero-description {
+  max-width: 700px;
+  font-size: clamp(1rem, 1.5vw, 1.25rem);
+  line-height: 1.8;
+  margin-top: 2rem;
+  color: rgba(224,224,240,0.7);
+  opacity: 0;
+  transform: translateY(30px);
+}
+
+.hero-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  margin-top: 3rem;
+  opacity: 0;
+  transform: translateY(30px);
+}
+
+.btn {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.85rem;
+  letter-spacing: 0.2em;
+  padding: 1rem 2.5rem;
+  border: none;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  text-transform: uppercase;
+  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  clip-path: polygon(12px 0, 100% 0, calc(100% - 12px) 100%, 0 100%);
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--neon-blue), var(--neon-violet));
+  color: #fff;
+  box-shadow: 0 0 30px rgba(0,240,255,0.3), inset 0 0 30px rgba(0,240,255,0.1);
+}
+.btn-primary:hover {
+  transform: scale(1.08) translateY(-3px);
+  box-shadow: 0 0 50px rgba(0,240,255,0.5), 0 0 100px rgba(139,0,255,0.3);
+}
+
+.btn-secondary {
+  background: transparent;
+  color: var(--neon-magenta);
+  border: 1px solid var(--neon-magenta);
+  box-shadow: 0 0 20px rgba(255,0,255,0.15), inset 0 0 20px rgba(255,0,255,0.05);
+}
+.btn-secondary:hover {
+  background: rgba(255,0,255,0.1);
+  transform: scale(1.08) translateY(-3px);
+  box-shadow: 0 0 40px rgba(255,0,255,0.4), inset 0 0 40px rgba(255,0,255,0.1);
+}
+
+.btn::before {
+  content: '';
+  position: absolute;
+  top: 0; left: -100%;
+  width: 100%; height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+  transition: left 0.5s ease;
+}
+.btn:hover::before { left: 100%; }
+
+.scroll-indicator {
+  position: absolute;
+  bottom: 3rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  opacity: 0;
+  animation: fadeInUp 1s ease 3s forwards;
+}
+.scroll-indicator span {
+  font-family: 'Orbitron', monospace;
+  font-size: 0.65rem;
+  letter-spacing: 0.3em;
+  color: rgba(0,240,255,0.5);
+}
+.scroll-arrow {
+  width: 20px;
+  height: 20px;
+  border-right: 2px solid var(--neon-blue);
+  border-bottom: 2px solid var(--neon-blue);
+  transform: rotate(45deg);
+  animation: scrollBounce 2s ease-in-out infinite;
+}
+
+@keyframes scrollBounce {
+  0%, 100% { transform: rotate(45deg) translateY(0); opacity: 1; }
+  50% { transform: rotate(45deg) translateY(8px); opacity: 0.4; }
+}
+
+@keyframes fadeInUp {
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.section {
+  min-height: 100vh;
+  padding: 8rem 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.section-inner {
+  max-width: 1200px;
+  width: 100%;
+}
+
+.section-title {
+  font-family: 'Orbitron', sans-serif;
+  font-size: clamp(1.8rem, 4vw, 3rem);
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 0 20px var(--neon-violet), 0 0 60px rgba(139,0,255,0.3);
+  margin-bottom: 1rem;
+  opacity: 0;
+  transform: translateY(40px);
+}
+
+.section-line {
+  width: 80px;
+  height: 3px;
+  background: linear-gradient(90deg, var(--neon-blue), var(--neon-magenta));
+  box-shadow: 0 0 15px var(--neon-blue);
+  margin-bottom: 2rem;
+  opacity: 0;
+  transform: scaleX(0);
+  transform-origin: left;
+}
+
+.section-text {
+  font-size: 1.15rem;
+  line-height: 2;
+  color: rgba(224,224,240,0.6);
+  max-width: 800px;
+  opacity: 0;
+  transform: translateY(30px);
+}
+
+.fleet-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 2rem;
+  margin-top: 3rem;
+}
+
+.fleet-card {
+  background: var(--glass-bg);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(0,240,255,0.1);
+  padding: 2.5rem;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  opacity: 0;
+  transform: translateY(50px);
+  clip-path: polygon(0 0, calc(100% - 20px) 0, 100% 20px, 100% 100%, 20px 100%, 0 calc(100% - 20px));
+}
+.fleet-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 2px;
+  background: linear-gradient(90deg, transparent, var(--neon-blue), transparent);
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+.fleet-card:hover::before { opacity: 1; }
+.fleet-card:hover {
+  transform: translateY(-10px) scale(1.02);
+  border-color: rgba(0,240,255,0.3);
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5), 0 0 40px rgba(0,240,255,0.1);
+}
+
+.fleet-card h3 {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 1.3rem;
+  color: var(--neon-blue);
+  text-shadow: 0 0 10px rgba(0,240,255,0.5);
+  margin-bottom: 0.5rem;
+}
+
+.fleet-card .tag {
+  font-family: 'Orbitron', monospace;
+  font-size: 0.65rem;
+  letter-spacing: 0.2em;
+  color: var(--neon-magenta);
+  text-shadow: 0 0 8px rgba(255,0,255,0.5);
+  display: inline-block;
+  margin-bottom: 1rem;
+  padding: 0.3rem 0.8rem;
+  border: 1px solid rgba(255,0,255,0.3);
+}
+
+.fleet-card p {
+  font-size: 1rem;
+  line-height: 1.7;
+  color: rgba(224,224,240,0.5);
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 2rem;
+  margin-top: 3rem;
+}
+
+.stat-item {
+  text-align: center;
+  padding: 2rem;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(139,0,255,0.15);
+  opacity: 0;
+  transform: translateY(30px);
+}
+
+.stat-number {
+  font-family: 'Orbitron', sans-serif;
+  font-size: clamp(2rem, 4vw, 3.5rem);
+  font-weight: 900;
+  background: linear-gradient(135deg, var(--neon-blue), var(--neon-magenta));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.stat-label {
+  font-family: 'Orbitron', monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.3em;
+  color: rgba(224,224,240,0.4);
+  margin-top: 0.5rem;
+}
+
+.traffic-gauge {
+  margin-top: 4rem;
+  padding: 2rem;
+  background: rgba(0,0,0,0.3);
+  border: 1px solid rgba(0,240,255,0.1);
+  backdrop-filter: blur(8px);
+  opacity: 0;
+  transform: translateY(30px);
+}
+
+.gauge-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+}
+
+.gauge-header h4 {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.85rem;
+  letter-spacing: 0.2em;
+  color: var(--neon-blue);
+  text-shadow: 0 0 10px rgba(0,240,255,0.5);
+}
+
+.gauge-live {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: 'Orbitron', monospace;
+  font-size: 0.65rem;
+  color: #00ff88;
+  text-shadow: 0 0 8px rgba(0,255,136,0.5);
+}
+.gauge-live::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  background: #00ff88;
+  border-radius: 50%;
+  box-shadow: 0 0 10px #00ff88;
+  animation: livePulse 1.5s ease-in-out infinite;
+}
+@keyframes livePulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.7); }
+}
+
+.gauge-bar-container {
+  height: 6px;
+  background: rgba(255,255,255,0.05);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 1rem;
+}
+
+.gauge-bar {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, var(--neon-blue), var(--neon-magenta), var(--neon-violet));
+  border-radius: 3px;
+  box-shadow: 0 0 15px var(--neon-blue);
+  transition: width 1.5s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+.gauge-stats {
+  display: flex;
+  justify-content: space-between;
+  font-family: 'Orbitron', monospace;
+  font-size: 0.7rem;
+  color: rgba(224,224,240,0.4);
+}
+
+.experience-section {
+  text-align: center;
+}
+
+.experience-features {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 3rem;
+  margin-top: 3rem;
+}
+
+.exp-feature {
+  flex: 1;
+  min-width: 220px;
+  max-width: 300px;
+  opacity: 0;
+  transform: translateY(40px);
+}
+
+.exp-icon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+  display: block;
+  filter: drop-shadow(0 0 15px var(--neon-blue));
+}
+
+.exp-feature h4 {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 1rem;
+  color: var(--neon-magenta);
+  text-shadow: 0 0 10px rgba(255,0,255,0.4);
+  margin-bottom: 0.8rem;
+  letter-spacing: 0.1em;
+}
+
+.exp-feature p {
+  font-size: 0.95rem;
+  line-height: 1.7;
+  color: rgba(224,224,240,0.5);
+}
+
+footer {
+  text-align: center;
+  padding: 4rem 2rem;
+  border-top: 1px solid rgba(0,240,255,0.08);
+  background: rgba(0,0,0,0.3);
+  position: relative;
+  z-index: 2;
+}
+
+footer p {
+  font-family: 'Orbitron', monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.3em;
+  color: rgba(224,224,240,0.3);
+}
+
+.mouse-glow {
+  position: fixed;
+  width: 500px;
+  height: 500px;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 1;
+  background: radial-gradient(circle, rgba(0,240,255,0.04) 0%, transparent 70%);
+  transform: translate(-50%, -50%);
+  transition: left 0.3s ease-out, top 0.3s ease-out;
+}
+
+@media (max-width: 768px) {
+  .hero-buttons { flex-direction: column; align-items: center; }
+  .btn { width: 100%; max-width: 320px; text-align: center; }
+  .fleet-grid { grid-template-columns: 1fr; }
+  .stats-grid { grid-template-columns: repeat(2, 1fr); }
 }
 </style>
-
 </head>
-
 <body>
 
-<div class="container">
-
-<div class="header">
-<h1>NEXUS DUMP SEARCHER</h1>
-<p>Fast reverse tool</p>
+<div id="loader">
+  <div class="loader-text">BADOUFLY // INITIALISATION</div>
+  <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
 </div>
 
-<div class="grid">
+<div id="canvas-container"></div>
+<div class="mouse-glow" id="mouseGlow"></div>
 
-<div class="panel">
-<h3 style="color:#fff;">FILE</h3>
-<input type="file" id="dumpFile">
+<div class="content">
+  <section class="hero">
+    <h1 class="hero-title">BADOUFLY</h1>
+    <p class="hero-subtitle">PROPULSEZ VOTRE FUTUR</p>
+    <p class="hero-description">
+      La plateforme de mobilité aérienne à la demande. Jets électriques autonomes, sécurité pilotée par IA, cabines immersives nouvelle génération. Le ciel n'a jamais été aussi proche.
+    </p>
+    <div class="hero-buttons">
+      <button class="btn btn-primary" data-sound>Reserver mon vol</button>
+      <button class="btn btn-secondary" data-sound>Explorer la flotte</button>
+      <button class="btn btn-secondary" data-sound>Experience BADOUFLY</button>
+    </div>
+    <div class="scroll-indicator">
+      <span>SCROLL</span>
+      <div class="scroll-arrow"></div>
+    </div>
+  </section>
 
-<p id="status" style="color:#666;margin-top:10px;">Idle</p>
-<p id="lineCount" style="color:#0f0;">0 lines</p>
+  <section class="section" id="fleet">
+    <div class="section-inner">
+      <h2 class="section-title">La Flotte 2100</h2>
+      <div class="section-line"></div>
+      <p class="section-text">
+        Trois modèles d'aéronefs eVTOL de derni&egrave;re g&eacute;n&eacute;ration, chacun con&ccedil;u pour une exp&eacute;rience unique de vol urbain et interurbain.
+      </p>
+      <div class="fleet-grid">
+        <div class="fleet-card">
+          <h3>BADOUFLY PHANTOM</h3>
+          <span class="tag">URBAN / 2-4 PASSAGERS</span>
+          <p>eVTOL compact pour trajets urbains. Autonomie 250 km. Silence absolu. D&eacute;collage vertical depuis tout rooftop.</p>
+        </div>
+        <div class="fleet-card">
+          <h3>BADOUFLY AURORA</h3>
+          <span class="tag">INTERCITY / 6-8 PASSAGERS</span>
+          <p>Cabine panoramique 360&deg;. Autonomie 600 km. Vitesse de croisi&egrave;re 320 km/h. L'exp&eacute;rience premium par excellence.</p>
+        </div>
+        <div class="fleet-card">
+          <h3>BADOUFLY NOVA</h3>
+          <span class="tag">LONG RANGE / 12 PASSAGERS</span>
+          <p>Le flagship. Autonomie 1200 km. Suite priv&eacute;e IA-adaptive. Service conciergerie embarqu&eacute;e. Le luxe &agrave; 10 000 pieds.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="stats">
+    <div class="section-inner">
+      <h2 class="section-title">BADOUFLY en chiffres</h2>
+      <div class="section-line"></div>
+      <div class="stats-grid">
+        <div class="stat-item">
+          <div class="stat-number" data-target="2847">0</div>
+          <div class="stat-label">VOLS / JOUR</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-number" data-target="142">0</div>
+          <div class="stat-label">VILLES CONNECT&Eacute;ES</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-number" data-target="99.9">0</div>
+          <div class="stat-label">% S&Eacute;CURIT&Eacute; IA</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-number" data-target="0">0</div>
+          <div class="stat-label">&Eacute;MISSIONS CO2</div>
+        </div>
+      </div>
+
+      <div class="traffic-gauge">
+        <div class="gauge-header">
+          <h4>TRAFIG A&Eacute;RIEN EN TEMPS R&Eacute;EL</h4>
+          <span class="gauge-live">LIVE</span>
+        </div>
+        <div class="gauge-bar-container">
+          <div class="gauge-bar" id="trafficBar"></div>
+        </div>
+        <div class="gauge-stats">
+          <span id="activeFlights">0 vols actifs</span>
+          <span id="capacityPct">0% capacit&eacute;</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section experience-section" id="experience">
+    <div class="section-inner">
+      <h2 class="section-title" style="text-align:center;">L'Experience BADOUFLY</h2>
+      <div class="section-line" style="margin-left:auto;margin-right:auto;"></div>
+      <p class="section-text" style="margin-left:auto;margin-right:auto;text-align:center;">
+        Chaque vol est une immersion totale dans le futur de la mobilit&eacute;.
+      </p>
+      <div class="experience-features">
+        <div class="exp-feature">
+          <span class="exp-icon">&#9889;</span>
+          <h4>Propulsion &Eacute;lectrique</h4>
+          <p>Zero &eacute;mission, silence absolu. 12 moteurs redondants pour une s&eacute;curit&eacute; totale.</p>
+        </div>
+        <div class="exp-feature">
+          <span class="exp-icon">&#129302;</span>
+          <h4>Navigation IA</h4>
+          <p>Pilotage autonome de niveau 5. L'IA anticipe les conditions en temps r&eacute;el.</p>
+        </div>
+        <div class="exp-feature">
+          <span class="exp-icon">&#127912;</span>
+          <h4>Cabine Immersive</h4>
+          <p>Parois holographiques, ambiance adaptive, conciergerie virtuelle personnalis&eacute;e.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <p>&copy; 2100 BADOUFLY CORPORATION &mdash; TOUS DROITS RESERVES &mdash; MOBILITE AERIENNE DE DEMAIN</p>
+  </footer>
 </div>
 
-<div class="panel">
-<h3 style="color:#fff;">SEARCH</h3>
-
-<input type="text" id="searchInput" placeholder="Search..." oninput="filterLines()">
-
-<select id="typeFilter" onchange="filterLines()">
-<option value="">All types</option>
-</select>
-
-<div id="resultsList" class="results-list"></div>
-
-<button onclick="generateOffsets()">GENERATE OFFSETS</button>
-<button onclick="clearSelection()">CLEAR</button>
-
+<div class="marquee">
+  <div class="marquee-inner" id="marqueeContent"></div>
 </div>
 
-</div>
-
-<textarea id="outputOffsets" placeholder="Offsets output..."></textarea>
-
-</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
 
 <script>
+(function() {
+  'use strict';
 
-let parsedData = [];
-let filteredLines = [];
-let selectedIndices = new Set();
+  // ===== LOADER =====
+  const progressFill = document.getElementById('progressFill');
+  const loader = document.getElementById('loader');
+  let loadProgress = 0;
 
-/* LOAD FILE */
-document.getElementById("dumpFile").addEventListener("change", loadDump);
+  function simulateLoading() {
+    const interval = setInterval(() => {
+      loadProgress += Math.random() * 15 + 5;
+      if (loadProgress >= 100) {
+        loadProgress = 100;
+        progressFill.style.width = '100%';
+        clearInterval(interval);
+        setTimeout(() => {
+          loader.classList.add('hidden');
+          initAnimations();
+        }, 600);
+      } else {
+        progressFill.style.width = loadProgress + '%';
+      }
+    }, 200);
+  }
+  simulateLoading();
 
-function loadDump(e){
-const file = e.target.files[0];
-if(!file) return;
+  // ===== MARQUEE =====
+  const marqueeText = [
+    '&Eacute;VASION VERTICALE', 'LUXE PROPULS&Eacute;', 'BADOUFLY',
+    'MOBILIT&Eacute; A&Eacute;RIENNE', 'JETS &Eacute;LECTRIQUES', 'S&Eacute;CURIT&Eacute; IA',
+    'CABINES IMMERSIVES', 'RESERVATION INSTANTAN&Eacute;E', 'ZERO &Eacute;MISSION'
+  ];
+  const marqueeContent = document.getElementById('marqueeContent');
+  const marqueeHTML = marqueeText.map(t => `<span>${t}</span>`).join('');
+  marqueeContent.innerHTML = marqueeHTML + marqueeHTML;
 
-const reader = new FileReader();
+  // ===== MOUSE GLOW =====
+  const mouseGlow = document.getElementById('mouseGlow');
+  let mouseX = 0, mouseY = 0;
 
-document.getElementById("status").innerText = "Loading...";
+  document.addEventListener('mousemove', (e) => {
+    mouseX = e.clientX;
+    mouseY = e.clientY;
+    mouseGlow.style.left = mouseX + 'px';
+    mouseGlow.style.top = mouseY + 'px';
+  });
 
-reader.onload = function(ev){
+  // ===== SOUND =====
+  const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
-const lines = ev.target.result.split("\n");
+  function playHoverSound() {
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(800, audioCtx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(1200, audioCtx.currentTime + 0.1);
+    gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.15);
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.15);
+  }
 
-parseDump(lines);
-buildTypes();
+  document.querySelectorAll('[data-sound]').forEach(btn => {
+    btn.addEventListener('mouseenter', () => {
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      playHoverSound();
+    });
+  });
 
-document.getElementById("status").innerText = "Ready";
-document.getElementById("lineCount").innerText = lines.length + " lines";
+  // ===== THREE.JS SCENE =====
+  const container = document.getElementById('canvas-container');
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 2000);
+  camera.position.set(0, 2, 18);
 
-filterLines();
-};
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setClearColor(0x0a0a12, 1);
+  container.appendChild(renderer.domElement);
 
-reader.readAsText(file);
-}
+  // Lights
+  const ambientLight = new THREE.AmbientLight(0x111122, 0.5);
+  scene.add(ambientLight);
 
-/* PARSE */
-function parseDump(lines){
-parsedData = [];
+  const blueLight = new THREE.PointLight(0x00f0ff, 2, 100);
+  blueLight.position.set(10, 10, 10);
+  scene.add(blueLight);
 
-let currentClass = "GLOBAL";
+  const magentaLight = new THREE.PointLight(0xff00ff, 1.5, 100);
+  magentaLight.position.set(-10, -5, 10);
+  scene.add(magentaLight);
 
-const regex = /public\s+([\w<>]+)\s+(\w+)\(.*?\).*?RVA:\s*(0x[0-9A-Fa-f]+)/;
+  const violetLight = new THREE.PointLight(0x8b00ff, 1, 80);
+  violetLight.position.set(0, 15, -10);
+  scene.add(violetLight);
 
-for(let i=0;i<lines.length;i++){
-let line = lines[i];
+  // ===== FUTURISTIC AIRCRAFT =====
+  const aircraft = new THREE.Group();
 
-if(line.includes("class ")){
-let c = line.match(/class\s+(\w+)/);
-if(c) currentClass = c[1];
-}
+  // Fuselage
+  const fuselageGeom = new THREE.ConeGeometry(0.5, 6, 8);
+  const fuselageMat = new THREE.MeshPhongMaterial({
+    color: 0x1a1a2e,
+    emissive: 0x0a0a1a,
+    specular: 0x00f0ff,
+    shininess: 100,
+    transparent: true,
+    opacity: 0.9
+  });
+  const fuselage = new THREE.Mesh(fuselageGeom, fuselageMat);
+  fuselage.rotation.z = Math.PI / 2;
+  aircraft.add(fuselage);
 
-if(line.includes("RVA")){
-let m = regex.exec(line);
-if(m){
-parsedData.push({
-class: currentClass,
-type: m[1],
-name: m[2],
-rva: m[3],
-index: i
-});
-}
-}
-}
-}
+  // Cockpit
+  const cockpitGeom = new THREE.SphereGeometry(0.6, 16, 16, 0, Math.PI * 2, 0, Math.PI / 2);
+  const cockpitMat = new THREE.MeshPhongMaterial({
+    color: 0x00f0ff,
+    emissive: 0x00f0ff,
+    emissiveIntensity: 0.3,
+    transparent: true,
+    opacity: 0.4,
+    shininess: 200
+  });
+  const cockpit = new THREE.Mesh(cockpitGeom, cockpitMat);
+  cockpit.position.set(2.5, 0.1, 0);
+  cockpit.scale.set(1.5, 0.6, 0.8);
+  aircraft.add(cockpit);
 
-/* TYPES */
-function buildTypes(){
-const sel = document.getElementById("typeFilter");
+  // Wings
+  const wingGeom = new THREE.BoxGeometry(1.5, 0.08, 8);
+  const wingMat = new THREE.MeshPhongMaterial({
+    color: 0x1a1a2e,
+    emissive: 0x0a0a1a,
+    specular: 0x8b00ff,
+    shininess: 80
+  });
+  const wings = new THREE.Mesh(wingGeom, wingMat);
+  wings.position.set(-0.5, 0, 0);
+  aircraft.add(wings);
 
-const types = [...new Set(parsedData.map(x=>x.type))];
+  // Wing accents (neon strips)
+  const wingAccentGeom = new THREE.BoxGeometry(1.5, 0.02, 8);
+  const wingAccentMat = new THREE.MeshBasicMaterial({ color: 0x00f0ff, transparent: true, opacity: 0.6 });
+  const wingAccent = new THREE.Mesh(wingAccentGeom, wingAccentMat);
+  wingAccent.position.set(-0.5, 0.06, 0);
+  aircraft.add(wingAccent);
 
-sel.innerHTML = '<option value="">All types</option>';
+  // Tail fins
+  const tailGeom = new THREE.BoxGeometry(0.8, 1.8, 0.08);
+  const tailMat = new THREE.MeshPhongMaterial({
+    color: 0x1a1a2e,
+    emissive: 0x8b00ff,
+    emissiveIntensity: 0.1,
+    specular: 0xff00ff,
+    shininess: 100
+  });
+  const tailLeft = new THREE.Mesh(tailGeom, tailMat);
+  tailLeft.position.set(-3, 0.8, 1);
+  tailLeft.rotation.z = 0.15;
+  aircraft.add(tailLeft);
 
-types.forEach(t=>{
-let o=document.createElement("option");
-o.value=t;
-o.textContent=t;
-sel.appendChild(o);
-});
-}
+  const tailRight = new THREE.Mesh(tailGeom, tailMat);
+  tailRight.position.set(-3, 0.8, -1);
+  tailRight.rotation.z = -0.15;
+  aircraft.add(tailRight);
 
-/* FILTER */
-function filterLines(){
-const search = document.getElementById("searchInput").value.toLowerCase();
-const type = document.getElementById("typeFilter").value;
+  // Engines (4x)
+  const enginePositions = [
+    { x: 1, z: 3 }, { x: 1, z: -3 }, { x: -1.5, z: 2 }, { x: -1.5, z: -2 }
+  ];
+  enginePositions.forEach(pos => {
+    const engineGeom = new THREE.CylinderGeometry(0.3, 0.25, 0.4, 12);
+    const engineMat = new THREE.MeshPhongMaterial({
+      color: 0x111122,
+      emissive: 0x00f0ff,
+      emissiveIntensity: 0.2,
+      specular: 0x00f0ff,
+      shininess: 150
+    });
+    const engine = new THREE.Mesh(engineGeom, engineMat);
+    engine.position.set(pos.x, 0, pos.z);
+    engine.rotation.x = Math.PI / 2;
+    aircraft.add(engine);
 
-filteredLines = parsedData.filter(x=>{
-return (!search || x.name.toLowerCase().includes(search))
-&& (!type || x.type===type);
-});
+    // Engine glow
+    const glowGeom = new THREE.SphereGeometry(0.2, 8, 8);
+    const glowMat = new THREE.MeshBasicMaterial({ color: 0x00f0ff, transparent: true, opacity: 0.8 });
+    const glow = new THREE.Mesh(glowGeom, glowMat);
+    glow.position.set(pos.x - 0.3, 0, pos.z);
+    aircraft.add(glow);
+  });
 
-render();
-}
+  // Nose glow
+  const noseGlowGeom = new THREE.SphereGeometry(0.15, 8, 8);
+  const noseGlowMat = new THREE.MeshBasicMaterial({ color: 0xff00ff, transparent: true, opacity: 0.9 });
+  const noseGlow = new THREE.Mesh(noseGlowGeom, noseGlowMat);
+  noseGlow.position.set(3.2, 0, 0);
+  aircraft.add(noseGlow);
 
-/* RENDER */
-function render(){
-const div = document.getElementById("resultsList");
-div.innerHTML = "";
+  aircraft.rotation.y = -0.3;
+  aircraft.position.y = 1;
+  scene.add(aircraft);
 
-if(filteredLines.length === 0){
-div.innerHTML = '<p style="color:#666;padding:20px;">No results</p>';
-return;
-}
+  // ===== LIGHT TRAIL =====
+  const trailCount = 80;
+  const trailGeom = new THREE.BufferGeometry();
+  const trailPositions = new Float32Array(trailCount * 3);
+  const trailOpacities = [];
+  for (let i = 0; i < trailCount; i++) {
+    trailPositions[i * 3] = -3 - i * 0.3;
+    trailPositions[i * 3 + 1] = 1;
+    trailPositions[i * 3 + 2] = 0;
+    trailOpacities.push(1 - i / trailCount);
+  }
+  trailGeom.setAttribute('position', new THREE.BufferAttribute(trailPositions, 3));
+  const trailMat = new THREE.PointsMaterial({
+    color: 0x00f0ff,
+    size: 0.15,
+    transparent: true,
+    opacity: 0.6,
+    blending: THREE.AdditiveBlending
+  });
+  const trail = new THREE.Points(trailGeom, trailMat);
+  scene.add(trail);
 
-for(const item of filteredLines){
+  // ===== PARTICLES =====
+  const particleCount = 3000;
+  const particleGeom = new THREE.BufferGeometry();
+  const particlePos = new Float32Array(particleCount * 3);
+  const particleColors = new Float32Array(particleCount * 3);
 
-const el = document.createElement("div");
-el.className = "result-line" + (selectedIndices.has(item.index) ? " selected" : "");
+  for (let i = 0; i < particleCount; i++) {
+    particlePos[i * 3] = (Math.random() - 0.5) * 200;
+    particlePos[i * 3 + 1] = (Math.random() - 0.5) * 200;
+    particlePos[i * 3 + 2] = (Math.random() - 0.5) * 200;
 
-el.innerHTML = `
-<span class="class">${item.class}</span>
-<span class="type">${item.type}</span>
-<span>${item.name}</span>
-<span class="result-addr">${item.rva}</span>
-`;
+    const colorChoice = Math.random();
+    if (colorChoice < 0.33) {
+      particleColors[i * 3] = 0; particleColors[i * 3 + 1] = 0.94; particleColors[i * 3 + 2] = 1;
+    } else if (colorChoice < 0.66) {
+      particleColors[i * 3] = 1; particleColors[i * 3 + 1] = 0; particleColors[i * 3 + 2] = 1;
+    } else {
+      particleColors[i * 3] = 0.55; particleColors[i * 3 + 1] = 0; particleColors[i * 3 + 2] = 1;
+    }
+  }
+  particleGeom.setAttribute('position', new THREE.BufferAttribute(particlePos, 3));
+  particleGeom.setAttribute('color', new THREE.BufferAttribute(particleColors, 3));
 
-el.onclick = ()=>{
-if(selectedIndices.has(item.index)) selectedIndices.delete(item.index);
-else selectedIndices.add(item.index);
-render();
-};
+  const particleMat = new THREE.PointsMaterial({
+    size: 0.3,
+    vertexColors: true,
+    transparent: true,
+    opacity: 0.7,
+    blending: THREE.AdditiveBlending
+  });
+  const particles = new THREE.Points(particleGeom, particleMat);
+  scene.add(particles);
 
-el.ondblclick = ()=>{
-navigator.clipboard.writeText(item.rva);
-};
+  // ===== CLOUD RINGS =====
+  const cloudRings = [];
+  for (let i = 0; i < 8; i++) {
+    const ringGeom = new THREE.TorusGeometry(30 + i * 15, 0.1, 8, 60);
+    const ringMat = new THREE.MeshBasicMaterial({
+      color: i % 2 === 0 ? 0x00f0ff : 0x8b00ff,
+      transparent: true,
+      opacity: 0.08
+    });
+    const ring = new THREE.Mesh(ringGeom, ringMat);
+    ring.rotation.x = Math.PI / 2 + (Math.random() - 0.5) * 0.3;
+    ring.position.y = -20 - i * 8;
+    scene.add(ring);
+    cloudRings.push({ mesh: ring, speed: 0.001 + Math.random() * 0.002 });
+  }
 
-div.appendChild(el);
-}
-}
+  // ===== GRID FLOOR =====
+  const gridHelper = new THREE.GridHelper(200, 80, 0x0a0a2e, 0x0a0a2e);
+  gridHelper.position.y = -25;
+  gridHelper.material.transparent = true;
+  gridHelper.material.opacity = 0.15;
+  scene.add(gridHelper);
 
-/* CLEAR */
-function clearSelection(){
-selectedIndices.clear();
-render();
-}
+  // ===== PARALLAX =====
+  let targetRotX = 0, targetRotY = 0;
 
-/* EXPORT */
-function generateOffsets(){
+  document.addEventListener('mousemove', (e) => {
+    const nx = (e.clientX / window.innerWidth - 0.5) * 2;
+    const ny = (e.clientY / window.innerHeight - 0.5) * 2;
+    targetRotX = ny * 0.15;
+    targetRotY = nx * 0.3;
+  });
 
-let out = "// OFFSETS\n\n";
+  // ===== SCROLL =====
+  let scrollProgress = 0;
+  window.addEventListener('scroll', () => {
+    const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+    scrollProgress = window.scrollY / maxScroll;
+  });
 
-const sel = parsedData.filter(x=>selectedIndices.has(x.index));
+  // ===== RESIZE =====
+  window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
 
-for(const x of sel){
-out += `// ${x.class} :: ${x.type} ${x.name}\n`;
-out += `#define ${x.class}_${x.name}`.toUpperCase() + ` ${x.rva}\n\n`;
-}
+  // ===== ANIMATION LOOP =====
+  let time = 0;
+  function animate() {
+    requestAnimationFrame(animate);
+    time += 0.016;
 
-document.getElementById("outputOffsets").value = out;
-}
+    aircraft.rotation.y += 0.003;
+    aircraft.rotation.x = THREE.MathUtils.lerp(aircraft.rotation.x, targetRotX, 0.03);
+    aircraft.rotation.z = THREE.MathUtils.lerp(aircraft.rotation.z, -targetRotY * 0.5, 0.03);
+    aircraft.position.y = 1 + Math.sin(time * 0.8) * 0.5;
 
+    // Trail animation
+    const positions = trailGeom.attributes.position.array;
+    for (let i = 0; i < trailCount; i++) {
+      positions[i * 3] -= 0.15;
+      positions[i * 3 + 1] = 1 + Math.sin(time * 2 + i * 0.3) * 0.2;
+      positions[i * 3 + 2] = Math.sin(time + i * 0.5) * 0.5;
+      if (positions[i * 3] < -30) {
+        positions[i * 3] = -3;
+        positions[i * 3 + 1] = 1;
+        positions[i * 3 + 2] = 0;
+      }
+    }
+    trailGeom.attributes.position.needsUpdate = true;
+
+    // Particles rotation
+    particles.rotation.y += 0.0003;
+    particles.rotation.x += 0.0001;
+
+    // Cloud rings
+    cloudRings.forEach(r => {
+      r.mesh.rotation.z += r.speed;
+    });
+
+    // Camera zoom on scroll
+    camera.position.z = 18 - scrollProgress * 6;
+    camera.position.y = 2 - scrollProgress * 3;
+
+    // Mouse-based light movement
+    blueLight.position.x = 10 + mouseX * 0.01;
+    magentaLight.position.y = -5 + mouseY * 0.01;
+
+    // Engine glow pulse
+    aircraft.children.forEach(child => {
+      if (child.material && child.material.emissiveIntensity !== undefined && child.material.emissive) {
+        child.material.emissiveIntensity = 0.2 + Math.sin(time * 3) * 0.1;
+      }
+    });
+
+    renderer.render(scene, camera);
+  }
+  animate();
+
+  // ===== GSAP ANIMATIONS =====
+  function initAnimations() {
+    gsap.registerPlugin(ScrollTrigger);
+
+    // Hero entrance
+    gsap.to('.hero-subtitle', { opacity: 1, y: 0, duration: 1, delay: 0.2, ease: 'power3.out' });
+    gsap.to('.hero-description', { opacity: 1, y: 0, duration: 1, delay: 0.5, ease: 'power3.out' });
+    gsap.to('.hero-buttons', { opacity: 1, y: 0, duration: 1, delay: 0.8, ease: 'power3.out' });
+
+    // Section titles
+    document.querySelectorAll('.section-title').forEach(el => {
+      gsap.to(el, {
+        scrollTrigger: { trigger: el, start: 'top 80%', toggleActions: 'play none none reverse' },
+        opacity: 1, y: 0, duration: 0.8, ease: 'power3.out'
+      });
+    });
+
+    // Section lines
+    document.querySelectorAll('.section-line').forEach(el => {
+      gsap.to(el, {
+        scrollTrigger: { trigger: el, start: 'top 85%', toggleActions: 'play none none reverse' },
+        opacity: 1, scaleX: 1, duration: 0.8, ease: 'power3.out'
+      });
+    });
+
+    // Section text
+    document.querySelectorAll('.section-text').forEach(el => {
+      gsap.to(el, {
+        scrollTrigger: { trigger: el, start: 'top 80%', toggleActions: 'play none none reverse' },
+        opacity: 1, y: 0, duration: 0.8, delay: 0.2, ease: 'power3.out'
+      });
+    });
+
+    // Fleet cards
+    document.querySelectorAll('.fleet-card').forEach((card, i) => {
+      gsap.to(card, {
+        scrollTrigger: { trigger: card, start: 'top 85%', toggleActions: 'play none none reverse' },
+        opacity: 1, y: 0, duration: 0.8, delay: i * 0.15, ease: 'power3.out'
+      });
+    });
+
+    // Stat items
+    document.querySelectorAll('.stat-item').forEach((item, i) => {
+      gsap.to(item, {
+        scrollTrigger: { trigger: item, start: 'top 85%', toggleActions: 'play none none reverse' },
+        opacity: 1, y: 0, duration: 0.8, delay: i * 0.1, ease: 'power3.out'
+      });
+    });
+
+    // Stat counters
+    document.querySelectorAll('.stat-number[data-target]').forEach(el => {
+      const target = parseFloat(el.dataset.target);
+      const isFloat = target % 1 !== 0;
+      gsap.to({ val: 0 }, {
+        val: target,
+        duration: 2,
+        delay: 0.5,
+        ease: 'power2.out',
+        scrollTrigger: { trigger: el, start: 'top 85%' },
+        onUpdate: function() {
+          el.textContent = isFloat ? this.targets()[0].val.toFixed(1) : Math.floor(this.targets()[0].val).toLocaleString();
+        }
+      });
+    });
+
+    // Traffic gauge
+    const trafficBar = document.getElementById('trafficBar');
+    const activeFlights = document.getElementById('activeFlights');
+    const capacityPct = document.getElementById('capacityPct');
+
+    gsap.to('.traffic-gauge', {
+      scrollTrigger: { trigger: '.traffic-gauge', start: 'top 85%', toggleActions: 'play none none reverse' },
+      opacity: 1, y: 0, duration: 0.8, ease: 'power3.out',
+      onComplete: () => {
+        const flights = Math.floor(Math.random() * 800 + 1200);
+        const capacity = Math.floor(Math.random() * 30 + 55);
+        gsap.to(trafficBar, { width: capacity + '%', duration: 2, ease: 'power2.out' });
+        activeFlights.textContent = flights.toLocaleString() + ' vols actifs';
+        capacityPct.textContent = capacity + '% capacit&eacute;';
+      }
+    });
+
+    // Experience features
+    document.querySelectorAll('.exp-feature').forEach((feat, i) => {
+      gsap.to(feat, {
+        scrollTrigger: { trigger: feat, start: 'top 85%', toggleActions: 'play none none reverse' },
+        opacity: 1, y: 0, duration: 0.8, delay: i * 0.2, ease: 'power3.out'
+      });
+    });
+
+    // Live traffic update
+    setInterval(() => {
+      const flights = Math.floor(Math.random() * 200 + 1800);
+      const capacity = Math.floor(Math.random() * 20 + 60);
+      activeFlights.textContent = flights.toLocaleString() + ' vols actifs';
+      capacityPct.textContent = capacity + '% capacit&eacute;';
+      gsap.to(trafficBar, { width: capacity + '%', duration: 1.5, ease: 'power2.out' });
+    }, 4000);
+  }
+
+})();
 </script>
-
 </body>
 </html>
