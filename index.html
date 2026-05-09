@@ -1,1169 +1,750 @@
-<!DOCTYPE html>
-<html lang="fr">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>BADOUFLY — Propulsez votre futur</title>
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;500;700&display=swap');
+“use client”;
+import { useEffect, useRef, useCallback, useState } from “react”;
 
-*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+// ── Textarea primitive ──────────────────────────────────────────────
+const Textarea = ({ className = “”, …props }) => (
 
-:root {
-  --neon-blue: #00f0ff;
-  --neon-magenta: #ff00ff;
-  --neon-violet: #8b00ff;
-  --deep-space: #0a0a12;
-  --glass-bg: rgba(10, 10, 18, 0.75);
-}
+  <textarea
+    className={`flex min-h-[80px] w-full rounded-md border border-neutral-700 bg-transparent px-3 py-2 text-sm placeholder:text-neutral-500 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-yellow-500 disabled:opacity-50 resize-none ${className}`}
+    {...props}
+  />
+);
 
-html { scroll-behavior: smooth; }
-
-body {
-  font-family: 'Rajdhani', sans-serif;
-  background: var(--deep-space);
-  color: #e0e0f0;
-  overflow-x: hidden;
-  cursor: crosshair;
-}
-
-#loader {
-  position: fixed;
-  inset: 0;
-  z-index: 9999;
-  background: var(--deep-space);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  transition: opacity 0.8s ease, visibility 0.8s ease;
-}
-#loader.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
-#loader .loader-text {
-  font-family: 'Orbitron', monospace;
-  font-size: clamp(1rem, 3vw, 2rem);
-  color: var(--neon-blue);
-  text-shadow: 0 0 20px var(--neon-blue), 0 0 60px var(--neon-violet);
-  letter-spacing: 0.5em;
-  animation: loaderPulse 1.2s ease-in-out infinite;
-}
-#loader .progress-bar {
-  width: min(400px, 80vw);
-  height: 3px;
-  background: rgba(255,255,255,0.05);
-  border-radius: 2px;
-  margin-top: 2rem;
-  overflow: hidden;
-}
-#loader .progress-fill {
-  height: 100%;
-  width: 0%;
-  background: linear-gradient(90deg, var(--neon-blue), var(--neon-magenta));
-  box-shadow: 0 0 20px var(--neon-blue);
-  transition: width 0.3s ease;
+// ── Auto-resize hook ────────────────────────────────────────────────
+function useAutoResizeTextarea({ minHeight, maxHeight }) {
+  const textareaRef = useRef(null);
+  const adjustHeight = useCallback((reset) => {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    if (reset) { ta.style.height = `${minHeight}px`; return; }
+    ta.style.height = `${minHeight}px`;
+    ta.style.height = `${Math.max(minHeight, Math.min(ta.scrollHeight, maxHeight ?? Infinity))}px`;
+  }, [minHeight, maxHeight]);
+  useEffect(() => { if (textareaRef.current) textareaRef.current.style.height = `${minHeight}px`; }, [minHeight]);
+  useEffect(() => {
+    const h = () => adjustHeight();
+    window.addEventListener("resize", h);
+    return () => window.removeEventListener("resize", h);
+  }, [adjustHeight]);
+  return { textareaRef, adjustHeight };
 }
 
-@keyframes loaderPulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
-}
+// ── Casino AI Chat ──────────────────────────────────────────────────
+const BOT_REPLIES = [
+  "🎰 Place your bet and let fate decide! Minimum bet is $10.",
+  "♠️ Welcome to the High Roller table. Your current balance: $1,000.",
+  "🎲 The roulette wheel is hot tonight — three reds in a row!",
+  "🃏 Blackjack pays 3:2. Want to double down on that hand?",
+  "🏆 You're only $200 away from VIP status. Keep spinning!",
+  "💰 Tonight's jackpot stands at $48,320. Feeling lucky?",
+  "🎯 Tip: Slots near the entrance have the highest payout rates.",
+];
 
-#canvas-container {
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-}
+function CasinoChatWidget({ onCommand }) {
+  const [value, setValue] = useState("");
+  const [messages, setMessages] = useState([
+    { role: "bot", text: "Welcome to ABYSS CASINO. I'm your AI concierge. Ask me anything — bets, rules, bonuses!" }
+  ]);
+  const [typing, setTyping] = useState(false);
+  const bottomRef = useRef(null);
+  const { textareaRef, adjustHeight } = useAutoResizeTextarea({ minHeight: 52, maxHeight: 160 });
 
-canvas { display: block; }
+  const send = useCallback(() => {
+    const trimmed = value.trim();
+    if (!trimmed) return;
+    setMessages(m => [...m, { role: "user", text: trimmed }]);
+    setValue(""); adjustHeight(true);
+    onCommand && onCommand(trimmed);
+    setTyping(true);
+    setTimeout(() => {
+      setTyping(false);
+      setMessages(m => [...m, { role: "bot", text: BOT_REPLIES[Math.floor(Math.random() * BOT_REPLIES.length)] }]);
+    }, 900 + Math.random() * 600);
+  }, [value, adjustHeight, onCommand]);
 
-.marquee {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  width: 100%;
-  z-index: 1;
-  overflow: hidden;
-  background: rgba(0,0,0,0.4);
-  backdrop-filter: blur(4px);
-  border-top: 1px solid rgba(0,240,255,0.15);
-  padding: 0.6rem 0;
-}
-.marquee-inner {
-  display: flex;
-  white-space: nowrap;
-  animation: marqueeScroll 30s linear infinite;
-  font-family: 'Orbitron', monospace;
-  font-size: 0.75rem;
-  letter-spacing: 0.3em;
-  color: rgba(0,240,255,0.5);
-}
-.marquee-inner span { margin-right: 4rem; }
-@keyframes marqueeScroll {
-  0% { transform: translateX(0); }
-  100% { transform: translateX(-50%); }
-}
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, typing]);
 
-.content {
-  position: relative;
-  z-index: 2;
-}
-
-.hero {
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  padding: 2rem;
-  position: relative;
-}
-
-.hero-title {
-  font-family: 'Orbitron', sans-serif;
-  font-size: clamp(3rem, 10vw, 9rem);
-  font-weight: 900;
-  letter-spacing: 0.15em;
-  color: #fff;
-  text-shadow:
-    0 0 10px var(--neon-blue),
-    0 0 40px var(--neon-blue),
-    0 0 80px var(--neon-violet),
-    0 0 120px var(--neon-violet);
-  animation: neonFlicker 4s ease-in-out infinite;
-  position: relative;
-}
-.hero-title::after {
-  content: 'BADOUFLY';
-  position: absolute;
-  left: 2px;
-  top: 2px;
-  color: var(--neon-magenta);
-  z-index: -1;
-  animation: glitch 3s ease-in-out infinite;
-  clip-path: inset(0 0 0 0);
-}
-
-@keyframes neonFlicker {
-  0%, 19%, 21%, 23%, 25%, 54%, 56%, 100% {
-    text-shadow:
-      0 0 10px var(--neon-blue),
-      0 0 40px var(--neon-blue),
-      0 0 80px var(--neon-violet),
-      0 0 120px var(--neon-violet);
-    opacity: 1;
-  }
-  20%, 24%, 55% {
-    text-shadow: none;
-    opacity: 0.85;
-  }
-}
-
-@keyframes glitch {
-  0%, 90%, 100% { clip-path: inset(0 0 100% 0); transform: translate(0); }
-  92% { clip-path: inset(20% 0 50% 0); transform: translate(-4px, 2px); }
-  94% { clip-path: inset(60% 0 10% 0); transform: translate(4px, -2px); }
-  96% { clip-path: inset(40% 0 30% 0); transform: translate(-2px, 1px); }
-  98% { clip-path: inset(10% 0 70% 0); transform: translate(2px, -1px); }
-}
-
-.hero-subtitle {
-  font-family: 'Orbitron', sans-serif;
-  font-size: clamp(0.9rem, 2vw, 1.5rem);
-  letter-spacing: 0.5em;
-  color: var(--neon-magenta);
-  margin-top: 1rem;
-  text-shadow: 0 0 15px var(--neon-magenta);
-  opacity: 0;
-  transform: translateY(30px);
-}
-
-.hero-description {
-  max-width: 700px;
-  font-size: clamp(1rem, 1.5vw, 1.25rem);
-  line-height: 1.8;
-  margin-top: 2rem;
-  color: rgba(224,224,240,0.7);
-  opacity: 0;
-  transform: translateY(30px);
-}
-
-.hero-buttons {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1.5rem;
-  margin-top: 3rem;
-  opacity: 0;
-  transform: translateY(30px);
-}
-
-.btn {
-  font-family: 'Orbitron', sans-serif;
-  font-size: 0.85rem;
-  letter-spacing: 0.2em;
-  padding: 1rem 2.5rem;
-  border: none;
-  cursor: pointer;
-  position: relative;
-  overflow: hidden;
-  text-transform: uppercase;
-  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-  clip-path: polygon(12px 0, 100% 0, calc(100% - 12px) 100%, 0 100%);
-}
-
-.btn-primary {
-  background: linear-gradient(135deg, var(--neon-blue), var(--neon-violet));
-  color: #fff;
-  box-shadow: 0 0 30px rgba(0,240,255,0.3), inset 0 0 30px rgba(0,240,255,0.1);
-}
-.btn-primary:hover {
-  transform: scale(1.08) translateY(-3px);
-  box-shadow: 0 0 50px rgba(0,240,255,0.5), 0 0 100px rgba(139,0,255,0.3);
-}
-
-.btn-secondary {
-  background: transparent;
-  color: var(--neon-magenta);
-  border: 1px solid var(--neon-magenta);
-  box-shadow: 0 0 20px rgba(255,0,255,0.15), inset 0 0 20px rgba(255,0,255,0.05);
-}
-.btn-secondary:hover {
-  background: rgba(255,0,255,0.1);
-  transform: scale(1.08) translateY(-3px);
-  box-shadow: 0 0 40px rgba(255,0,255,0.4), inset 0 0 40px rgba(255,0,255,0.1);
-}
-
-.btn::before {
-  content: '';
-  position: absolute;
-  top: 0; left: -100%;
-  width: 100%; height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
-  transition: left 0.5s ease;
-}
-.btn:hover::before { left: 100%; }
-
-.scroll-indicator {
-  position: absolute;
-  bottom: 3rem;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.5rem;
-  opacity: 0;
-  animation: fadeInUp 1s ease 3s forwards;
-}
-.scroll-indicator span {
-  font-family: 'Orbitron', monospace;
-  font-size: 0.65rem;
-  letter-spacing: 0.3em;
-  color: rgba(0,240,255,0.5);
-}
-.scroll-arrow {
-  width: 20px;
-  height: 20px;
-  border-right: 2px solid var(--neon-blue);
-  border-bottom: 2px solid var(--neon-blue);
-  transform: rotate(45deg);
-  animation: scrollBounce 2s ease-in-out infinite;
-}
-
-@keyframes scrollBounce {
-  0%, 100% { transform: rotate(45deg) translateY(0); opacity: 1; }
-  50% { transform: rotate(45deg) translateY(8px); opacity: 0.4; }
-}
-
-@keyframes fadeInUp {
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.section {
-  min-height: 100vh;
-  padding: 8rem 2rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.section-inner {
-  max-width: 1200px;
-  width: 100%;
-}
-
-.section-title {
-  font-family: 'Orbitron', sans-serif;
-  font-size: clamp(1.8rem, 4vw, 3rem);
-  font-weight: 700;
-  color: #fff;
-  text-shadow: 0 0 20px var(--neon-violet), 0 0 60px rgba(139,0,255,0.3);
-  margin-bottom: 1rem;
-  opacity: 0;
-  transform: translateY(40px);
-}
-
-.section-line {
-  width: 80px;
-  height: 3px;
-  background: linear-gradient(90deg, var(--neon-blue), var(--neon-magenta));
-  box-shadow: 0 0 15px var(--neon-blue);
-  margin-bottom: 2rem;
-  opacity: 0;
-  transform: scaleX(0);
-  transform-origin: left;
-}
-
-.section-text {
-  font-size: 1.15rem;
-  line-height: 2;
-  color: rgba(224,224,240,0.6);
-  max-width: 800px;
-  opacity: 0;
-  transform: translateY(30px);
-}
-
-.fleet-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 2rem;
-  margin-top: 3rem;
-}
-
-.fleet-card {
-  background: var(--glass-bg);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(0,240,255,0.1);
-  padding: 2.5rem;
-  position: relative;
-  overflow: hidden;
-  transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-  opacity: 0;
-  transform: translateY(50px);
-  clip-path: polygon(0 0, calc(100% - 20px) 0, 100% 20px, 100% 100%, 20px 100%, 0 calc(100% - 20px));
-}
-.fleet-card::before {
-  content: '';
-  position: absolute;
-  top: 0; left: 0;
-  width: 100%; height: 2px;
-  background: linear-gradient(90deg, transparent, var(--neon-blue), transparent);
-  opacity: 0;
-  transition: opacity 0.4s ease;
-}
-.fleet-card:hover::before { opacity: 1; }
-.fleet-card:hover {
-  transform: translateY(-10px) scale(1.02);
-  border-color: rgba(0,240,255,0.3);
-  box-shadow: 0 20px 60px rgba(0,0,0,0.5), 0 0 40px rgba(0,240,255,0.1);
-}
-
-.fleet-card h3 {
-  font-family: 'Orbitron', sans-serif;
-  font-size: 1.3rem;
-  color: var(--neon-blue);
-  text-shadow: 0 0 10px rgba(0,240,255,0.5);
-  margin-bottom: 0.5rem;
-}
-
-.fleet-card .tag {
-  font-family: 'Orbitron', monospace;
-  font-size: 0.65rem;
-  letter-spacing: 0.2em;
-  color: var(--neon-magenta);
-  text-shadow: 0 0 8px rgba(255,0,255,0.5);
-  display: inline-block;
-  margin-bottom: 1rem;
-  padding: 0.3rem 0.8rem;
-  border: 1px solid rgba(255,0,255,0.3);
-}
-
-.fleet-card p {
-  font-size: 1rem;
-  line-height: 1.7;
-  color: rgba(224,224,240,0.5);
-}
-
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 2rem;
-  margin-top: 3rem;
-}
-
-.stat-item {
-  text-align: center;
-  padding: 2rem;
-  background: rgba(255,255,255,0.02);
-  border: 1px solid rgba(139,0,255,0.15);
-  opacity: 0;
-  transform: translateY(30px);
-}
-
-.stat-number {
-  font-family: 'Orbitron', sans-serif;
-  font-size: clamp(2rem, 4vw, 3.5rem);
-  font-weight: 900;
-  background: linear-gradient(135deg, var(--neon-blue), var(--neon-magenta));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-.stat-label {
-  font-family: 'Orbitron', monospace;
-  font-size: 0.7rem;
-  letter-spacing: 0.3em;
-  color: rgba(224,224,240,0.4);
-  margin-top: 0.5rem;
-}
-
-.traffic-gauge {
-  margin-top: 4rem;
-  padding: 2rem;
-  background: rgba(0,0,0,0.3);
-  border: 1px solid rgba(0,240,255,0.1);
-  backdrop-filter: blur(8px);
-  opacity: 0;
-  transform: translateY(30px);
-}
-
-.gauge-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1.5rem;
-}
-
-.gauge-header h4 {
-  font-family: 'Orbitron', sans-serif;
-  font-size: 0.85rem;
-  letter-spacing: 0.2em;
-  color: var(--neon-blue);
-  text-shadow: 0 0 10px rgba(0,240,255,0.5);
-}
-
-.gauge-live {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-family: 'Orbitron', monospace;
-  font-size: 0.65rem;
-  color: #00ff88;
-  text-shadow: 0 0 8px rgba(0,255,136,0.5);
-}
-.gauge-live::before {
-  content: '';
-  width: 8px;
-  height: 8px;
-  background: #00ff88;
-  border-radius: 50%;
-  box-shadow: 0 0 10px #00ff88;
-  animation: livePulse 1.5s ease-in-out infinite;
-}
-@keyframes livePulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.4; transform: scale(0.7); }
-}
-
-.gauge-bar-container {
-  height: 6px;
-  background: rgba(255,255,255,0.05);
-  border-radius: 3px;
-  overflow: hidden;
-  margin-bottom: 1rem;
-}
-
-.gauge-bar {
-  height: 100%;
-  width: 0%;
-  background: linear-gradient(90deg, var(--neon-blue), var(--neon-magenta), var(--neon-violet));
-  border-radius: 3px;
-  box-shadow: 0 0 15px var(--neon-blue);
-  transition: width 1.5s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-}
-
-.gauge-stats {
-  display: flex;
-  justify-content: space-between;
-  font-family: 'Orbitron', monospace;
-  font-size: 0.7rem;
-  color: rgba(224,224,240,0.4);
-}
-
-.experience-section {
-  text-align: center;
-}
-
-.experience-features {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 3rem;
-  margin-top: 3rem;
-}
-
-.exp-feature {
-  flex: 1;
-  min-width: 220px;
-  max-width: 300px;
-  opacity: 0;
-  transform: translateY(40px);
-}
-
-.exp-icon {
-  font-size: 3rem;
-  margin-bottom: 1rem;
-  display: block;
-  filter: drop-shadow(0 0 15px var(--neon-blue));
-}
-
-.exp-feature h4 {
-  font-family: 'Orbitron', sans-serif;
-  font-size: 1rem;
-  color: var(--neon-magenta);
-  text-shadow: 0 0 10px rgba(255,0,255,0.4);
-  margin-bottom: 0.8rem;
-  letter-spacing: 0.1em;
-}
-
-.exp-feature p {
-  font-size: 0.95rem;
-  line-height: 1.7;
-  color: rgba(224,224,240,0.5);
-}
-
-footer {
-  text-align: center;
-  padding: 4rem 2rem;
-  border-top: 1px solid rgba(0,240,255,0.08);
-  background: rgba(0,0,0,0.3);
-  position: relative;
-  z-index: 2;
-}
-
-footer p {
-  font-family: 'Orbitron', monospace;
-  font-size: 0.7rem;
-  letter-spacing: 0.3em;
-  color: rgba(224,224,240,0.3);
-}
-
-.mouse-glow {
-  position: fixed;
-  width: 500px;
-  height: 500px;
-  border-radius: 50%;
-  pointer-events: none;
-  z-index: 1;
-  background: radial-gradient(circle, rgba(0,240,255,0.04) 0%, transparent 70%);
-  transform: translate(-50%, -50%);
-  transition: left 0.3s ease-out, top 0.3s ease-out;
-}
-
-@media (max-width: 768px) {
-  .hero-buttons { flex-direction: column; align-items: center; }
-  .btn { width: 100%; max-width: 320px; text-align: center; }
-  .fleet-grid { grid-template-columns: 1fr; }
-  .stats-grid { grid-template-columns: repeat(2, 1fr); }
-}
-</style>
-</head>
-<body>
-
-<div id="loader">
-  <div class="loader-text">BADOUFLY // INITIALISATION</div>
-  <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
-</div>
-
-<div id="canvas-container"></div>
-<div class="mouse-glow" id="mouseGlow"></div>
-
-<div class="content">
-  <section class="hero">
-    <h1 class="hero-title">BADOUFLY</h1>
-    <p class="hero-subtitle">PROPULSEZ VOTRE FUTUR</p>
-    <p class="hero-description">
-      La plateforme de mobilité aérienne à la demande. Jets électriques autonomes, sécurité pilotée par IA, cabines immersives nouvelle génération. Le ciel n'a jamais été aussi proche.
-    </p>
-    <div class="hero-buttons">
-      <button class="btn btn-primary" data-sound>Reserver mon vol</button>
-      <button class="btn btn-secondary" data-sound>Explorer la flotte</button>
-      <button class="btn btn-secondary" data-sound>Experience BADOUFLY</button>
-    </div>
-    <div class="scroll-indicator">
-      <span>SCROLL</span>
-      <div class="scroll-arrow"></div>
-    </div>
-  </section>
-
-  <section class="section" id="fleet">
-    <div class="section-inner">
-      <h2 class="section-title">La Flotte 2100</h2>
-      <div class="section-line"></div>
-      <p class="section-text">
-        Trois modèles d'aéronefs eVTOL de derni&egrave;re g&eacute;n&eacute;ration, chacun con&ccedil;u pour une exp&eacute;rience unique de vol urbain et interurbain.
-      </p>
-      <div class="fleet-grid">
-        <div class="fleet-card">
-          <h3>BADOUFLY PHANTOM</h3>
-          <span class="tag">URBAN / 2-4 PASSAGERS</span>
-          <p>eVTOL compact pour trajets urbains. Autonomie 250 km. Silence absolu. D&eacute;collage vertical depuis tout rooftop.</p>
+  return (
+    <div style={{
+      position: "fixed", bottom: 24, right: 24, width: 340,
+      background: "rgba(10,8,20,0.92)", border: "1px solid rgba(212,175,55,0.4)",
+      borderRadius: 16, boxShadow: "0 0 40px rgba(212,175,55,0.15), 0 0 80px rgba(120,40,200,0.2)",
+      backdropFilter: "blur(16px)", zIndex: 1000, display: "flex", flexDirection: "column", overflow: "hidden"
+    }}>
+      {/* Header */}
+      <div style={{
+        padding: "12px 16px", background: "linear-gradient(90deg,rgba(212,175,55,0.15),rgba(120,40,200,0.15))",
+        borderBottom: "1px solid rgba(212,175,55,0.2)", display: "flex", alignItems: "center", gap: 10
+      }}>
+        <div style={{
+          width: 32, height: 32, borderRadius: "50%",
+          background: "radial-gradient(circle,#d4af37,#7c28c8)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          fontSize: 16, boxShadow: "0 0 12px rgba(212,175,55,0.5)"
+        }}>🎴</div>
+        <div>
+          <div style={{ color: "#d4af37", fontFamily: "serif", fontWeight: 700, fontSize: 13, letterSpacing: 1 }}>ABYSS CONCIERGE</div>
+          <div style={{ color: "#7c28c8", fontSize: 10, letterSpacing: 2 }}>AI POWERED • LIVE</div>
         </div>
-        <div class="fleet-card">
-          <h3>BADOUFLY AURORA</h3>
-          <span class="tag">INTERCITY / 6-8 PASSAGERS</span>
-          <p>Cabine panoramique 360&deg;. Autonomie 600 km. Vitesse de croisi&egrave;re 320 km/h. L'exp&eacute;rience premium par excellence.</p>
+        <div style={{ marginLeft: "auto", width: 8, height: 8, borderRadius: "50%", background: "#22c55e", boxShadow: "0 0 6px #22c55e" }} />
+      </div>
+
+      {/* Messages */}
+      <div style={{ flex: 1, overflowY: "auto", padding: "12px 14px", maxHeight: 240, minHeight: 120, display: "flex", flexDirection: "column", gap: 8 }}>
+        {messages.map((m, i) => (
+          <div key={i} style={{
+            display: "flex", justifyContent: m.role === "user" ? "flex-end" : "flex-start"
+          }}>
+            <div style={{
+              maxWidth: "82%", padding: "8px 12px", borderRadius: m.role === "user" ? "14px 14px 4px 14px" : "14px 14px 14px 4px",
+              background: m.role === "user"
+                ? "linear-gradient(135deg,#d4af37,#b8922e)"
+                : "rgba(255,255,255,0.07)",
+              color: m.role === "user" ? "#000" : "#e2d9f3",
+              fontSize: 12, lineHeight: 1.5,
+              border: m.role === "bot" ? "1px solid rgba(212,175,55,0.15)" : "none",
+            }}>{m.text}</div>
+          </div>
+        ))}
+        {typing && (
+          <div style={{ display: "flex", gap: 4, padding: "8px 12px" }}>
+            {[0,1,2].map(i => (
+              <div key={i} style={{
+                width: 6, height: 6, borderRadius: "50%", background: "#d4af37",
+                animation: `bounce 1s ${i * 0.15}s infinite`,
+              }} />
+            ))}
+          </div>
+        )}
+        <div ref={bottomRef} />
+      </div>
+
+      {/* Input */}
+      <div style={{ padding: "10px 12px", borderTop: "1px solid rgba(212,175,55,0.15)" }}>
+        <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
+          <Textarea
+            ref={textareaRef}
+            value={value}
+            onChange={e => { setValue(e.target.value); adjustHeight(); }}
+            onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
+            placeholder="Ask about bets, rules, bonuses…"
+            style={{ flex: 1, minHeight: 52, color: "#e2d9f3", fontSize: 12 }}
+          />
+          <button
+            onClick={send}
+            style={{
+              width: 36, height: 36, borderRadius: "50%", border: "none", cursor: "pointer",
+              background: value.trim() ? "linear-gradient(135deg,#d4af37,#b8922e)" : "rgba(255,255,255,0.08)",
+              color: value.trim() ? "#000" : "#666",
+              display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16,
+              transition: "all .2s", flexShrink: 0
+            }}
+          >↑</button>
         </div>
-        <div class="fleet-card">
-          <h3>BADOUFLY NOVA</h3>
-          <span class="tag">LONG RANGE / 12 PASSAGERS</span>
-          <p>Le flagship. Autonomie 1200 km. Suite priv&eacute;e IA-adaptive. Service conciergerie embarqu&eacute;e. Le luxe &agrave; 10 000 pieds.</p>
+        <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
+          {["Clone Screenshot", "Import Figma", "Upload Wallet", "Landing Page"].map(l => (
+            <button key={l} onClick={() => { setValue(l); }}
+              style={{
+                padding: "3px 8px", borderRadius: 20, fontSize: 10,
+                background: "rgba(212,175,55,0.08)", border: "1px solid rgba(212,175,55,0.2)",
+                color: "#d4af37", cursor: "pointer", transition: "all .2s"
+              }}>{l}</button>
+          ))}
         </div>
       </div>
     </div>
-  </section>
+  );
+}
 
-  <section class="section" id="stats">
-    <div class="section-inner">
-      <h2 class="section-title">BADOUFLY en chiffres</h2>
-      <div class="section-line"></div>
-      <div class="stats-grid">
-        <div class="stat-item">
-          <div class="stat-number" data-target="2847">0</div>
-          <div class="stat-label">VOLS / JOUR</div>
-        </div>
-        <div class="stat-item">
-          <div class="stat-number" data-target="142">0</div>
-          <div class="stat-label">VILLES CONNECT&Eacute;ES</div>
-        </div>
-        <div class="stat-item">
-          <div class="stat-number" data-target="99.9">0</div>
-          <div class="stat-label">% S&Eacute;CURIT&Eacute; IA</div>
-        </div>
-        <div class="stat-item">
-          <div class="stat-number" data-target="0">0</div>
-          <div class="stat-label">&Eacute;MISSIONS CO2</div>
-        </div>
-      </div>
+// ── Slot Machine ────────────────────────────────────────────────────
+const SYMBOLS = ["🍒","💎","7️⃣","🎰","⭐","🍋","🔔","💰"];
+function SlotMachine({ onWin }) {
+  const [reels, setReels] = useState([["🍒","💎","7️⃣"],["🍋","🎰","⭐"],["🔔","💰","🍒"]]);
+  const [spinning, setSpinning] = useState(false);
+  const [result, setResult] = useState(null);
+  const [bet, setBet] = useState(10);
 
-      <div class="traffic-gauge">
-        <div class="gauge-header">
-          <h4>TRAFIG A&Eacute;RIEN EN TEMPS R&Eacute;EL</h4>
-          <span class="gauge-live">LIVE</span>
-        </div>
-        <div class="gauge-bar-container">
-          <div class="gauge-bar" id="trafficBar"></div>
-        </div>
-        <div class="gauge-stats">
-          <span id="activeFlights">0 vols actifs</span>
-          <span id="capacityPct">0% capacit&eacute;</span>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <section class="section experience-section" id="experience">
-    <div class="section-inner">
-      <h2 class="section-title" style="text-align:center;">L'Experience BADOUFLY</h2>
-      <div class="section-line" style="margin-left:auto;margin-right:auto;"></div>
-      <p class="section-text" style="margin-left:auto;margin-right:auto;text-align:center;">
-        Chaque vol est une immersion totale dans le futur de la mobilit&eacute;.
-      </p>
-      <div class="experience-features">
-        <div class="exp-feature">
-          <span class="exp-icon">&#9889;</span>
-          <h4>Propulsion &Eacute;lectrique</h4>
-          <p>Zero &eacute;mission, silence absolu. 12 moteurs redondants pour une s&eacute;curit&eacute; totale.</p>
-        </div>
-        <div class="exp-feature">
-          <span class="exp-icon">&#129302;</span>
-          <h4>Navigation IA</h4>
-          <p>Pilotage autonome de niveau 5. L'IA anticipe les conditions en temps r&eacute;el.</p>
-        </div>
-        <div class="exp-feature">
-          <span class="exp-icon">&#127912;</span>
-          <h4>Cabine Immersive</h4>
-          <p>Parois holographiques, ambiance adaptive, conciergerie virtuelle personnalis&eacute;e.</p>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <footer>
-    <p>&copy; 2100 BADOUFLY CORPORATION &mdash; TOUS DROITS RESERVES &mdash; MOBILITE AERIENNE DE DEMAIN</p>
-  </footer>
-</div>
-
-<div class="marquee">
-  <div class="marquee-inner" id="marqueeContent"></div>
-</div>
-
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
-
-<script>
-(function() {
-  'use strict';
-
-  // ===== LOADER =====
-  const progressFill = document.getElementById('progressFill');
-  const loader = document.getElementById('loader');
-  let loadProgress = 0;
-
-  function simulateLoading() {
-    const interval = setInterval(() => {
-      loadProgress += Math.random() * 15 + 5;
-      if (loadProgress >= 100) {
-        loadProgress = 100;
-        progressFill.style.width = '100%';
-        clearInterval(interval);
-        setTimeout(() => {
-          loader.classList.add('hidden');
-          initAnimations();
-        }, 600);
-      } else {
-        progressFill.style.width = loadProgress + '%';
-      }
-    }, 200);
-  }
-  simulateLoading();
-
-  // ===== MARQUEE =====
-  const marqueeText = [
-    '&Eacute;VASION VERTICALE', 'LUXE PROPULS&Eacute;', 'BADOUFLY',
-    'MOBILIT&Eacute; A&Eacute;RIENNE', 'JETS &Eacute;LECTRIQUES', 'S&Eacute;CURIT&Eacute; IA',
-    'CABINES IMMERSIVES', 'RESERVATION INSTANTAN&Eacute;E', 'ZERO &Eacute;MISSION'
-  ];
-  const marqueeContent = document.getElementById('marqueeContent');
-  const marqueeHTML = marqueeText.map(t => `<span>${t}</span>`).join('');
-  marqueeContent.innerHTML = marqueeHTML + marqueeHTML;
-
-  // ===== MOUSE GLOW =====
-  const mouseGlow = document.getElementById('mouseGlow');
-  let mouseX = 0, mouseY = 0;
-
-  document.addEventListener('mousemove', (e) => {
-    mouseX = e.clientX;
-    mouseY = e.clientY;
-    mouseGlow.style.left = mouseX + 'px';
-    mouseGlow.style.top = mouseY + 'px';
-  });
-
-  // ===== SOUND =====
-  const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-
-  function playHoverSound() {
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-    osc.connect(gain);
-    gain.connect(audioCtx.destination);
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(800, audioCtx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(1200, audioCtx.currentTime + 0.1);
-    gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.15);
-    osc.start();
-    osc.stop(audioCtx.currentTime + 0.15);
-  }
-
-  document.querySelectorAll('[data-sound]').forEach(btn => {
-    btn.addEventListener('mouseenter', () => {
-      if (audioCtx.state === 'suspended') audioCtx.resume();
-      playHoverSound();
-    });
-  });
-
-  // ===== THREE.JS SCENE =====
-  const container = document.getElementById('canvas-container');
-  const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 2000);
-  camera.position.set(0, 2, 18);
-
-  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  renderer.setClearColor(0x0a0a12, 1);
-  container.appendChild(renderer.domElement);
-
-  // Lights
-  const ambientLight = new THREE.AmbientLight(0x111122, 0.5);
-  scene.add(ambientLight);
-
-  const blueLight = new THREE.PointLight(0x00f0ff, 2, 100);
-  blueLight.position.set(10, 10, 10);
-  scene.add(blueLight);
-
-  const magentaLight = new THREE.PointLight(0xff00ff, 1.5, 100);
-  magentaLight.position.set(-10, -5, 10);
-  scene.add(magentaLight);
-
-  const violetLight = new THREE.PointLight(0x8b00ff, 1, 80);
-  violetLight.position.set(0, 15, -10);
-  scene.add(violetLight);
-
-  // ===== FUTURISTIC AIRCRAFT =====
-  const aircraft = new THREE.Group();
-
-  // Fuselage
-  const fuselageGeom = new THREE.ConeGeometry(0.5, 6, 8);
-  const fuselageMat = new THREE.MeshPhongMaterial({
-    color: 0x1a1a2e,
-    emissive: 0x0a0a1a,
-    specular: 0x00f0ff,
-    shininess: 100,
-    transparent: true,
-    opacity: 0.9
-  });
-  const fuselage = new THREE.Mesh(fuselageGeom, fuselageMat);
-  fuselage.rotation.z = Math.PI / 2;
-  aircraft.add(fuselage);
-
-  // Cockpit
-  const cockpitGeom = new THREE.SphereGeometry(0.6, 16, 16, 0, Math.PI * 2, 0, Math.PI / 2);
-  const cockpitMat = new THREE.MeshPhongMaterial({
-    color: 0x00f0ff,
-    emissive: 0x00f0ff,
-    emissiveIntensity: 0.3,
-    transparent: true,
-    opacity: 0.4,
-    shininess: 200
-  });
-  const cockpit = new THREE.Mesh(cockpitGeom, cockpitMat);
-  cockpit.position.set(2.5, 0.1, 0);
-  cockpit.scale.set(1.5, 0.6, 0.8);
-  aircraft.add(cockpit);
-
-  // Wings
-  const wingGeom = new THREE.BoxGeometry(1.5, 0.08, 8);
-  const wingMat = new THREE.MeshPhongMaterial({
-    color: 0x1a1a2e,
-    emissive: 0x0a0a1a,
-    specular: 0x8b00ff,
-    shininess: 80
-  });
-  const wings = new THREE.Mesh(wingGeom, wingMat);
-  wings.position.set(-0.5, 0, 0);
-  aircraft.add(wings);
-
-  // Wing accents (neon strips)
-  const wingAccentGeom = new THREE.BoxGeometry(1.5, 0.02, 8);
-  const wingAccentMat = new THREE.MeshBasicMaterial({ color: 0x00f0ff, transparent: true, opacity: 0.6 });
-  const wingAccent = new THREE.Mesh(wingAccentGeom, wingAccentMat);
-  wingAccent.position.set(-0.5, 0.06, 0);
-  aircraft.add(wingAccent);
-
-  // Tail fins
-  const tailGeom = new THREE.BoxGeometry(0.8, 1.8, 0.08);
-  const tailMat = new THREE.MeshPhongMaterial({
-    color: 0x1a1a2e,
-    emissive: 0x8b00ff,
-    emissiveIntensity: 0.1,
-    specular: 0xff00ff,
-    shininess: 100
-  });
-  const tailLeft = new THREE.Mesh(tailGeom, tailMat);
-  tailLeft.position.set(-3, 0.8, 1);
-  tailLeft.rotation.z = 0.15;
-  aircraft.add(tailLeft);
-
-  const tailRight = new THREE.Mesh(tailGeom, tailMat);
-  tailRight.position.set(-3, 0.8, -1);
-  tailRight.rotation.z = -0.15;
-  aircraft.add(tailRight);
-
-  // Engines (4x)
-  const enginePositions = [
-    { x: 1, z: 3 }, { x: 1, z: -3 }, { x: -1.5, z: 2 }, { x: -1.5, z: -2 }
-  ];
-  enginePositions.forEach(pos => {
-    const engineGeom = new THREE.CylinderGeometry(0.3, 0.25, 0.4, 12);
-    const engineMat = new THREE.MeshPhongMaterial({
-      color: 0x111122,
-      emissive: 0x00f0ff,
-      emissiveIntensity: 0.2,
-      specular: 0x00f0ff,
-      shininess: 150
-    });
-    const engine = new THREE.Mesh(engineGeom, engineMat);
-    engine.position.set(pos.x, 0, pos.z);
-    engine.rotation.x = Math.PI / 2;
-    aircraft.add(engine);
-
-    // Engine glow
-    const glowGeom = new THREE.SphereGeometry(0.2, 8, 8);
-    const glowMat = new THREE.MeshBasicMaterial({ color: 0x00f0ff, transparent: true, opacity: 0.8 });
-    const glow = new THREE.Mesh(glowGeom, glowMat);
-    glow.position.set(pos.x - 0.3, 0, pos.z);
-    aircraft.add(glow);
-  });
-
-  // Nose glow
-  const noseGlowGeom = new THREE.SphereGeometry(0.15, 8, 8);
-  const noseGlowMat = new THREE.MeshBasicMaterial({ color: 0xff00ff, transparent: true, opacity: 0.9 });
-  const noseGlow = new THREE.Mesh(noseGlowGeom, noseGlowMat);
-  noseGlow.position.set(3.2, 0, 0);
-  aircraft.add(noseGlow);
-
-  aircraft.rotation.y = -0.3;
-  aircraft.position.y = 1;
-  scene.add(aircraft);
-
-  // ===== LIGHT TRAIL =====
-  const trailCount = 80;
-  const trailGeom = new THREE.BufferGeometry();
-  const trailPositions = new Float32Array(trailCount * 3);
-  const trailOpacities = [];
-  for (let i = 0; i < trailCount; i++) {
-    trailPositions[i * 3] = -3 - i * 0.3;
-    trailPositions[i * 3 + 1] = 1;
-    trailPositions[i * 3 + 2] = 0;
-    trailOpacities.push(1 - i / trailCount);
-  }
-  trailGeom.setAttribute('position', new THREE.BufferAttribute(trailPositions, 3));
-  const trailMat = new THREE.PointsMaterial({
-    color: 0x00f0ff,
-    size: 0.15,
-    transparent: true,
-    opacity: 0.6,
-    blending: THREE.AdditiveBlending
-  });
-  const trail = new THREE.Points(trailGeom, trailMat);
-  scene.add(trail);
-
-  // ===== PARTICLES =====
-  const particleCount = 3000;
-  const particleGeom = new THREE.BufferGeometry();
-  const particlePos = new Float32Array(particleCount * 3);
-  const particleColors = new Float32Array(particleCount * 3);
-
-  for (let i = 0; i < particleCount; i++) {
-    particlePos[i * 3] = (Math.random() - 0.5) * 200;
-    particlePos[i * 3 + 1] = (Math.random() - 0.5) * 200;
-    particlePos[i * 3 + 2] = (Math.random() - 0.5) * 200;
-
-    const colorChoice = Math.random();
-    if (colorChoice < 0.33) {
-      particleColors[i * 3] = 0; particleColors[i * 3 + 1] = 0.94; particleColors[i * 3 + 2] = 1;
-    } else if (colorChoice < 0.66) {
-      particleColors[i * 3] = 1; particleColors[i * 3 + 1] = 0; particleColors[i * 3 + 2] = 1;
-    } else {
-      particleColors[i * 3] = 0.55; particleColors[i * 3 + 1] = 0; particleColors[i * 3 + 2] = 1;
-    }
-  }
-  particleGeom.setAttribute('position', new THREE.BufferAttribute(particlePos, 3));
-  particleGeom.setAttribute('color', new THREE.BufferAttribute(particleColors, 3));
-
-  const particleMat = new THREE.PointsMaterial({
-    size: 0.3,
-    vertexColors: true,
-    transparent: true,
-    opacity: 0.7,
-    blending: THREE.AdditiveBlending
-  });
-  const particles = new THREE.Points(particleGeom, particleMat);
-  scene.add(particles);
-
-  // ===== CLOUD RINGS =====
-  const cloudRings = [];
-  for (let i = 0; i < 8; i++) {
-    const ringGeom = new THREE.TorusGeometry(30 + i * 15, 0.1, 8, 60);
-    const ringMat = new THREE.MeshBasicMaterial({
-      color: i % 2 === 0 ? 0x00f0ff : 0x8b00ff,
-      transparent: true,
-      opacity: 0.08
-    });
-    const ring = new THREE.Mesh(ringGeom, ringMat);
-    ring.rotation.x = Math.PI / 2 + (Math.random() - 0.5) * 0.3;
-    ring.position.y = -20 - i * 8;
-    scene.add(ring);
-    cloudRings.push({ mesh: ring, speed: 0.001 + Math.random() * 0.002 });
-  }
-
-  // ===== GRID FLOOR =====
-  const gridHelper = new THREE.GridHelper(200, 80, 0x0a0a2e, 0x0a0a2e);
-  gridHelper.position.y = -25;
-  gridHelper.material.transparent = true;
-  gridHelper.material.opacity = 0.15;
-  scene.add(gridHelper);
-
-  // ===== PARALLAX =====
-  let targetRotX = 0, targetRotY = 0;
-
-  document.addEventListener('mousemove', (e) => {
-    const nx = (e.clientX / window.innerWidth - 0.5) * 2;
-    const ny = (e.clientY / window.innerHeight - 0.5) * 2;
-    targetRotX = ny * 0.15;
-    targetRotY = nx * 0.3;
-  });
-
-  // ===== SCROLL =====
-  let scrollProgress = 0;
-  window.addEventListener('scroll', () => {
-    const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
-    scrollProgress = window.scrollY / maxScroll;
-  });
-
-  // ===== RESIZE =====
-  window.addEventListener('resize', () => {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-  });
-
-  // ===== ANIMATION LOOP =====
-  let time = 0;
-  function animate() {
-    requestAnimationFrame(animate);
-    time += 0.016;
-
-    aircraft.rotation.y += 0.003;
-    aircraft.rotation.x = THREE.MathUtils.lerp(aircraft.rotation.x, targetRotX, 0.03);
-    aircraft.rotation.z = THREE.MathUtils.lerp(aircraft.rotation.z, -targetRotY * 0.5, 0.03);
-    aircraft.position.y = 1 + Math.sin(time * 0.8) * 0.5;
-
-    // Trail animation
-    const positions = trailGeom.attributes.position.array;
-    for (let i = 0; i < trailCount; i++) {
-      positions[i * 3] -= 0.15;
-      positions[i * 3 + 1] = 1 + Math.sin(time * 2 + i * 0.3) * 0.2;
-      positions[i * 3 + 2] = Math.sin(time + i * 0.5) * 0.5;
-      if (positions[i * 3] < -30) {
-        positions[i * 3] = -3;
-        positions[i * 3 + 1] = 1;
-        positions[i * 3 + 2] = 0;
-      }
-    }
-    trailGeom.attributes.position.needsUpdate = true;
-
-    // Particles rotation
-    particles.rotation.y += 0.0003;
-    particles.rotation.x += 0.0001;
-
-    // Cloud rings
-    cloudRings.forEach(r => {
-      r.mesh.rotation.z += r.speed;
-    });
-
-    // Camera zoom on scroll
-    camera.position.z = 18 - scrollProgress * 6;
-    camera.position.y = 2 - scrollProgress * 3;
-
-    // Mouse-based light movement
-    blueLight.position.x = 10 + mouseX * 0.01;
-    magentaLight.position.y = -5 + mouseY * 0.01;
-
-    // Engine glow pulse
-    aircraft.children.forEach(child => {
-      if (child.material && child.material.emissiveIntensity !== undefined && child.material.emissive) {
-        child.material.emissiveIntensity = 0.2 + Math.sin(time * 3) * 0.1;
-      }
-    });
-
-    renderer.render(scene, camera);
-  }
-  animate();
-
-  // ===== GSAP ANIMATIONS =====
-  function initAnimations() {
-    gsap.registerPlugin(ScrollTrigger);
-
-    // Hero entrance
-    gsap.to('.hero-subtitle', { opacity: 1, y: 0, duration: 1, delay: 0.2, ease: 'power3.out' });
-    gsap.to('.hero-description', { opacity: 1, y: 0, duration: 1, delay: 0.5, ease: 'power3.out' });
-    gsap.to('.hero-buttons', { opacity: 1, y: 0, duration: 1, delay: 0.8, ease: 'power3.out' });
-
-    // Section titles
-    document.querySelectorAll('.section-title').forEach(el => {
-      gsap.to(el, {
-        scrollTrigger: { trigger: el, start: 'top 80%', toggleActions: 'play none none reverse' },
-        opacity: 1, y: 0, duration: 0.8, ease: 'power3.out'
-      });
-    });
-
-    // Section lines
-    document.querySelectorAll('.section-line').forEach(el => {
-      gsap.to(el, {
-        scrollTrigger: { trigger: el, start: 'top 85%', toggleActions: 'play none none reverse' },
-        opacity: 1, scaleX: 1, duration: 0.8, ease: 'power3.out'
-      });
-    });
-
-    // Section text
-    document.querySelectorAll('.section-text').forEach(el => {
-      gsap.to(el, {
-        scrollTrigger: { trigger: el, start: 'top 80%', toggleActions: 'play none none reverse' },
-        opacity: 1, y: 0, duration: 0.8, delay: 0.2, ease: 'power3.out'
-      });
-    });
-
-    // Fleet cards
-    document.querySelectorAll('.fleet-card').forEach((card, i) => {
-      gsap.to(card, {
-        scrollTrigger: { trigger: card, start: 'top 85%', toggleActions: 'play none none reverse' },
-        opacity: 1, y: 0, duration: 0.8, delay: i * 0.15, ease: 'power3.out'
-      });
-    });
-
-    // Stat items
-    document.querySelectorAll('.stat-item').forEach((item, i) => {
-      gsap.to(item, {
-        scrollTrigger: { trigger: item, start: 'top 85%', toggleActions: 'play none none reverse' },
-        opacity: 1, y: 0, duration: 0.8, delay: i * 0.1, ease: 'power3.out'
-      });
-    });
-
-    // Stat counters
-    document.querySelectorAll('.stat-number[data-target]').forEach(el => {
-      const target = parseFloat(el.dataset.target);
-      const isFloat = target % 1 !== 0;
-      gsap.to({ val: 0 }, {
-        val: target,
-        duration: 2,
-        delay: 0.5,
-        ease: 'power2.out',
-        scrollTrigger: { trigger: el, start: 'top 85%' },
-        onUpdate: function() {
-          el.textContent = isFloat ? this.targets()[0].val.toFixed(1) : Math.floor(this.targets()[0].val).toLocaleString();
+  const spin = () => {
+    if (spinning) return;
+    setSpinning(true); setResult(null);
+    const intervals = [0,1,2].map(i =>
+      setInterval(() => {
+        setReels(r => { const n = [...r]; n[i] = [SYMBOLS[Math.floor(Math.random()*8)],SYMBOLS[Math.floor(Math.random()*8)],SYMBOLS[Math.floor(Math.random()*8)]]; return n; });
+      }, 80 + i * 40)
+    );
+    [800, 1100, 1400].forEach((delay, i) => {
+      setTimeout(() => {
+        clearInterval(intervals[i]);
+        if (i === 2) {
+          setSpinning(false);
+          const final = [0,1,2].map(() => SYMBOLS[Math.floor(Math.random()*8)]);
+          setReels([
+            [final[0], SYMBOLS[Math.floor(Math.random()*8)], SYMBOLS[Math.floor(Math.random()*8)]],
+            [final[1], SYMBOLS[Math.floor(Math.random()*8)], SYMBOLS[Math.floor(Math.random()*8)]],
+            [final[2], SYMBOLS[Math.floor(Math.random()*8)], SYMBOLS[Math.floor(Math.random()*8)]],
+          ]);
+          if (final[0] === final[1] && final[1] === final[2]) {
+            const prize = bet * (final[0] === "💎" ? 100 : final[0] === "7️⃣" ? 50 : 10);
+            setResult({ win: true, amount: prize });
+            onWin && onWin(prize);
+          } else if (final[0] === final[1] || final[1] === final[2]) {
+            setResult({ win: true, amount: bet * 2 });
+          } else {
+            setResult({ win: false });
+          }
         }
-      });
+      }, delay);
     });
+  };
 
-    // Traffic gauge
-    const trafficBar = document.getElementById('trafficBar');
-    const activeFlights = document.getElementById('activeFlights');
-    const capacityPct = document.getElementById('capacityPct');
+  return (
+    <div style={{
+      background: "linear-gradient(145deg,rgba(20,10,40,0.9),rgba(40,20,10,0.9))",
+      border: "2px solid rgba(212,175,55,0.4)", borderRadius: 20,
+      padding: 24, textAlign: "center", position: "relative",
+      boxShadow: "0 0 30px rgba(212,175,55,0.2), inset 0 0 30px rgba(0,0,0,0.5)"
+    }}>
+      <div style={{ color: "#d4af37", fontFamily: "serif", fontSize: 13, letterSpacing: 3, marginBottom: 16, textTransform: "uppercase" }}>Slot Temple</div>
 
-    gsap.to('.traffic-gauge', {
-      scrollTrigger: { trigger: '.traffic-gauge', start: 'top 85%', toggleActions: 'play none none reverse' },
-      opacity: 1, y: 0, duration: 0.8, ease: 'power3.out',
-      onComplete: () => {
-        const flights = Math.floor(Math.random() * 800 + 1200);
-        const capacity = Math.floor(Math.random() * 30 + 55);
-        gsap.to(trafficBar, { width: capacity + '%', duration: 2, ease: 'power2.out' });
-        activeFlights.textContent = flights.toLocaleString() + ' vols actifs';
-        capacityPct.textContent = capacity + '% capacit&eacute;';
+      {/* Reels */}
+      <div style={{ display: "flex", gap: 8, justifyContent: "center", marginBottom: 16 }}>
+        {reels.map((reel, ri) => (
+          <div key={ri} style={{
+            width: 72, height: 180, overflow: "hidden",
+            background: "rgba(0,0,0,0.6)", borderRadius: 10,
+            border: "1px solid rgba(212,175,55,0.3)",
+            display: "flex", flexDirection: "column", alignItems: "center",
+            position: "relative"
+          }}>
+            {/* Win line highlight */}
+            <div style={{
+              position: "absolute", top: "50%", left: 0, right: 0, height: 60,
+              transform: "translateY(-50%)", background: "rgba(212,175,55,0.06)",
+              border: "1px solid rgba(212,175,55,0.2)", pointerEvents: "none"
+            }} />
+            {reel.map((sym, si) => (
+              <div key={si} style={{
+                width: "100%", height: 60, display: "flex", alignItems: "center",
+                justifyContent: "center", fontSize: 28,
+                transition: spinning ? "none" : "all .3s",
+                filter: si === 0 ? "drop-shadow(0 0 8px rgba(212,175,55,0.6))" : "none"
+              }}>{sym}</div>
+            ))}
+          </div>
+        ))}
+      </div>
+
+      {/* Bet */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12, marginBottom: 16 }}>
+        <span style={{ color: "#888", fontSize: 12 }}>BET</span>
+        {[5,10,25,50,100].map(b => (
+          <button key={b} onClick={() => setBet(b)} style={{
+            padding: "4px 10px", borderRadius: 20, fontSize: 11, cursor: "pointer",
+            background: bet === b ? "linear-gradient(135deg,#d4af37,#b8922e)" : "rgba(255,255,255,0.05)",
+            border: bet === b ? "none" : "1px solid rgba(212,175,55,0.2)",
+            color: bet === b ? "#000" : "#d4af37", transition: "all .2s"
+          }}>${b}</button>
+        ))}
+      </div>
+
+      {/* Spin button */}
+      <button onClick={spin} disabled={spinning} style={{
+        width: "100%", padding: "14px 0", borderRadius: 12, border: "none", cursor: spinning ? "default" : "pointer",
+        background: spinning ? "rgba(255,255,255,0.05)" : "linear-gradient(135deg,#d4af37 0%,#b8922e 50%,#d4af37 100%)",
+        backgroundSize: "200% 200%",
+        color: spinning ? "#555" : "#000", fontWeight: 800, fontSize: 15,
+        letterSpacing: 3, textTransform: "uppercase",
+        boxShadow: spinning ? "none" : "0 0 20px rgba(212,175,55,0.4)",
+        transition: "all .3s",
+        animation: !spinning ? "shimmer 2s linear infinite" : "none"
+      }}>
+        {spinning ? "SPINNING…" : "SPIN"}
+      </button>
+
+      {/* Result */}
+      {result && (
+        <div style={{
+          marginTop: 14, padding: "10px 16px", borderRadius: 10,
+          background: result.win ? "rgba(34,197,94,0.12)" : "rgba(239,68,68,0.12)",
+          border: `1px solid ${result.win ? "rgba(34,197,94,0.4)" : "rgba(239,68,68,0.3)"}`,
+          color: result.win ? "#22c55e" : "#ef4444", fontSize: 13, fontWeight: 700,
+          animation: "fadeIn .4s ease"
+        }}>
+          {result.win ? `🏆 WIN $${result.amount}!` : "💸 No luck this time…"}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Roulette ────────────────────────────────────────────────────────
+const ROULETTE_NUMS = Array.from({length: 37}, (_,i) => i);
+const RED_NUMS = [1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36];
+
+function Roulette() {
+  const [spinning, setSpinning] = useState(false);
+  const [result, setResult] = useState(null);
+  const [bet, setBet] = useState({ type: "red", amount: 10 });
+  const [rotation, setRotation] = useState(0);
+  const rafRef = useRef(null);
+
+  const spin = () => {
+    if (spinning) return;
+    setSpinning(true); setResult(null);
+    const totalSpin = 720 + Math.random() * 1440;
+    const start = performance.now();
+    const duration = 3000;
+    const startRot = rotation;
+    const animate = (now) => {
+      const elapsed = now - start;
+      const t = Math.min(elapsed / duration, 1);
+      const ease = 1 - Math.pow(1 - t, 4);
+      setRotation(startRot + totalSpin * ease);
+      if (t < 1) { rafRef.current = requestAnimationFrame(animate); }
+      else {
+        const finalAngle = (startRot + totalSpin) % 360;
+        const numIdx = Math.floor((finalAngle / 360) * 37);
+        const num = ROULETTE_NUMS[numIdx];
+        const isRed = RED_NUMS.includes(num);
+        const won = (bet.type === "red" && isRed) || (bet.type === "black" && !isRed && num !== 0) || (bet.type === "even" && num % 2 === 0 && num !== 0) || (bet.type === "odd" && num % 2 === 1);
+        setResult({ number: num, red: isRed, won, prize: won ? bet.amount * 2 : 0 });
+        setSpinning(false);
       }
-    });
+    };
+    rafRef.current = requestAnimationFrame(animate);
+  };
 
-    // Experience features
-    document.querySelectorAll('.exp-feature').forEach((feat, i) => {
-      gsap.to(feat, {
-        scrollTrigger: { trigger: feat, start: 'top 85%', toggleActions: 'play none none reverse' },
-        opacity: 1, y: 0, duration: 0.8, delay: i * 0.2, ease: 'power3.out'
+  useEffect(() => () => rafRef.current && cancelAnimationFrame(rafRef.current), []);
+
+  const wheelColors = ["#1a1a2e","#c0392b"];
+
+  return (
+    <div style={{
+      background: "linear-gradient(145deg,rgba(0,20,10,0.9),rgba(10,30,15,0.9))",
+      border: "2px solid rgba(34,197,94,0.3)", borderRadius: 20,
+      padding: 24, textAlign: "center",
+      boxShadow: "0 0 30px rgba(34,197,94,0.15)"
+    }}>
+      <div style={{ color: "#22c55e", fontFamily: "serif", fontSize: 13, letterSpacing: 3, marginBottom: 16 }}>ROULETTE</div>
+
+      {/* Wheel */}
+      <div style={{ position: "relative", width: 180, height: 180, margin: "0 auto 20px" }}>
+        <svg viewBox="0 0 180 180" style={{ transform: `rotate(${rotation}deg)`, transition: "none", width: "100%", height: "100%" }}>
+          <circle cx="90" cy="90" r="88" fill="#1a1a1a" stroke="rgba(212,175,55,0.5)" strokeWidth="2"/>
+          {ROULETTE_NUMS.map((n, i) => {
+            const angle = (i / 37) * 360;
+            const rad = (angle * Math.PI) / 180;
+            const x = 90 + 70 * Math.sin(rad);
+            const y = 90 - 70 * Math.cos(rad);
+            return (
+              <g key={n}>
+                <line x1="90" y1="90" x2={90 + 88 * Math.sin(rad)} y2={90 - 88 * Math.cos(rad)}
+                  stroke="rgba(212,175,55,0.2)" strokeWidth="0.5"/>
+                <circle cx={x} cy={y} r="9"
+                  fill={n === 0 ? "#22c55e" : RED_NUMS.includes(n) ? "#c0392b" : "#1a1a1a"}
+                  stroke="rgba(212,175,55,0.4)" strokeWidth="0.5"/>
+                <text x={x} y={y + 4} textAnchor="middle" fill="white" fontSize="6" fontWeight="bold">{n}</text>
+              </g>
+            );
+          })}
+          <circle cx="90" cy="90" r="18" fill="rgba(20,10,5,0.95)" stroke="rgba(212,175,55,0.6)" strokeWidth="2"/>
+          <text x="90" y="95" textAnchor="middle" fill="#d4af37" fontSize="14">⚙</text>
+        </svg>
+        {/* Ball indicator */}
+        <div style={{
+          position: "absolute", top: -6, left: "50%", transform: "translateX(-50%)",
+          width: 12, height: 12, borderRadius: "50%", background: "white",
+          boxShadow: "0 0 8px white"
+        }}/>
+      </div>
+
+      {/* Bet type */}
+      <div style={{ display: "flex", gap: 6, justifyContent: "center", flexWrap: "wrap", marginBottom: 12 }}>
+        {[["red","🔴 Red"],["black","⚫ Black"],["even","Even"],["odd","Odd"]].map(([type, label]) => (
+          <button key={type} onClick={() => setBet(b => ({...b, type}))} style={{
+            padding: "5px 12px", borderRadius: 20, fontSize: 11, cursor: "pointer",
+            background: bet.type === type ? "rgba(212,175,55,0.2)" : "rgba(255,255,255,0.05)",
+            border: `1px solid ${bet.type === type ? "rgba(212,175,55,0.6)" : "rgba(255,255,255,0.1)"}`,
+            color: bet.type === type ? "#d4af37" : "#888", transition: "all .2s"
+          }}>{label}</button>
+        ))}
+      </div>
+
+      <button onClick={spin} disabled={spinning} style={{
+        width: "100%", padding: "12px 0", borderRadius: 12, border: "none", cursor: spinning ? "default" : "pointer",
+        background: spinning ? "rgba(255,255,255,0.05)" : "linear-gradient(135deg,#22c55e,#16a34a)",
+        color: spinning ? "#555" : "#000", fontWeight: 800, fontSize: 14, letterSpacing: 2,
+        boxShadow: spinning ? "none" : "0 0 20px rgba(34,197,94,0.3)", transition: "all .3s"
+      }}>
+        {spinning ? "SPINNING…" : "PLACE BET & SPIN"}
+      </button>
+
+      {result && (
+        <div style={{
+          marginTop: 12, padding: "10px 16px", borderRadius: 10,
+          background: result.won ? "rgba(34,197,94,0.12)" : "rgba(239,68,68,0.12)",
+          border: `1px solid ${result.won ? "rgba(34,197,94,0.4)" : "rgba(239,68,68,0.3)"}`,
+          color: result.won ? "#22c55e" : "#ef4444", fontSize: 13
+        }}>
+          Number {result.number} ({result.number === 0 ? "Green" : result.red ? "Red" : "Black"})
+          {result.won ? ` — WIN $${result.prize}! 🏆` : " — You lost. Try again!"}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Blackjack ───────────────────────────────────────────────────────
+const SUITS = ["♠","♥","♦","♣"];
+const RANKS = ["A","2","3","4","5","6","7","8","9","10","J","Q","K"];
+const newDeck = () => SUITS.flatMap(s => RANKS.map(r => ({ suit: s, rank: r })));
+const shuffle = d => { const a = [...d]; for (let i = a.length-1; i > 0; i--) { const j = Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; };
+const cardVal = r => r === "A" ? 11 : ["J","Q","K"].includes(r) ? 10 : parseInt(r);
+const handVal = cards => {
+  let v = cards.reduce((s, c) => s + cardVal(c.rank), 0);
+  let aces = cards.filter(c => c.rank === "A").length;
+  while (v > 21 && aces--) v -= 10;
+  return v;
+};
+
+function Card({ card, hidden }) {
+  const isRed = card.suit === "♥" || card.suit === "♦";
+  return (
+    <div style={{
+      width: 52, height: 76, borderRadius: 8,
+      background: hidden ? "linear-gradient(135deg,#1a1a3e,#2d1b69)" : "white",
+      border: "1px solid rgba(212,175,55,0.4)",
+      display: "flex", flexDirection: "column", alignItems: hidden ? "center" : "flex-start",
+      justifyContent: hidden ? "center" : "flex-start",
+      padding: hidden ? 0 : "4px 6px",
+      boxShadow: "0 4px 12px rgba(0,0,0,0.5)",
+      color: hidden ? "#d4af37" : isRed ? "#c0392b" : "#1a1a1a",
+      fontSize: hidden ? 22 : 14, fontWeight: "bold",
+      transition: "all .3s", flexShrink: 0
+    }}>
+      {hidden ? "🂠" : <><div>{card.rank}</div><div style={{fontSize:16}}>{card.suit}</div></>}
+    </div>
+  );
+}
+
+function Blackjack() {
+  const [deck, setDeck] = useState(shuffle(newDeck()));
+  const [player, setPlayer] = useState([]);
+  const [dealer, setDealer] = useState([]);
+  const [status, setStatus] = useState("idle"); // idle|playing|done
+  const [result, setResult] = useState(null);
+  const [bet, setBet] = useState(20);
+  const [balance, setBalance] = useState(1000);
+
+  const deal = () => {
+    const d = shuffle(newDeck());
+    const p = [d[0], d[2]], dl = [d[1], d[3]];
+    setDeck(d.slice(4)); setPlayer(p); setDealer(dl); setStatus("playing"); setResult(null);
+    setBalance(b => b - bet);
+    if (handVal(p) === 21) { endGame(p, dl, d.slice(4), true); }
+  };
+
+  const endGame = (p, dl, dk, instant) => {
+    let d = [...dl]; let dk2 = [...dk];
+    if (!instant) { while (handVal(d) < 17) { d = [...d, dk2.shift()]; } }
+    const pv = handVal(p), dv = handVal(d);
+    let res;
+    if (pv > 21) res = "bust";
+    else if (instant || dv > 21 || pv > dv) { res = "win"; setBalance(b => b + bet * 2); }
+    else if (pv === dv) { res = "push"; setBalance(b => b + bet); }
+    else res = "lose";
+    setDealer(d); setDeck(dk2); setStatus("done"); setResult(res);
+  };
+
+  const hit = () => {
+    const card = deck[0]; const rest = deck.slice(1);
+    const np = [...player, card]; setPlayer(np); setDeck(rest);
+    if (handVal(np) >= 21) endGame(np, dealer, rest, false);
+  };
+
+  const stand = () => endGame(player, dealer, deck, false);
+
+  const resultColors = { win: "#22c55e", lose: "#ef4444", bust: "#ef4444", push: "#d4af37" };
+  const resultText = { win: "🏆 You Win!", lose: "💸 Dealer Wins", bust: "💥 Bust!", push: "🤝 Push" };
+
+  return (
+    <div style={{
+      background: "linear-gradient(145deg,rgba(0,30,15,0.95),rgba(5,20,10,0.95))",
+      border: "2px solid rgba(34,197,94,0.25)", borderRadius: 20, padding: 24,
+      boxShadow: "0 0 30px rgba(34,197,94,0.1)"
+    }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+        <div style={{ color: "#d4af37", fontFamily: "serif", fontSize: 13, letterSpacing: 3 }}>BLACKJACK</div>
+        <div style={{ color: "#22c55e", fontSize: 13, fontWeight: 700 }}>Balance: ${balance}</div>
+      </div>
+
+      {/* Dealer */}
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ color: "#888", fontSize: 10, letterSpacing: 2, marginBottom: 8 }}>
+          DEALER {status === "done" ? `(${handVal(dealer)})` : ""}
+        </div>
+        <div style={{ display: "flex", gap: 6, minHeight: 76 }}>
+          {dealer.map((c, i) => <Card key={i} card={c} hidden={status === "playing" && i === 1}/>)}
+        </div>
+      </div>
+
+      {/* Player */}
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ color: "#888", fontSize: 10, letterSpacing: 2, marginBottom: 8 }}>
+          YOU {player.length ? `(${handVal(player)})` : ""}
+        </div>
+        <div style={{ display: "flex", gap: 6, minHeight: 76 }}>
+          {player.map((c, i) => <Card key={i} card={c} hidden={false}/>)}
+        </div>
+      </div>
+
+      {/* Result */}
+      {result && (
+        <div style={{
+          marginBottom: 12, padding: "8px 14px", borderRadius: 10, textAlign: "center",
+          background: `${resultColors[result]}18`, border: `1px solid ${resultColors[result]}55`,
+          color: resultColors[result], fontWeight: 700, fontSize: 14, animation: "fadeIn .4s"
+        }}>{resultText[result]}</div>
+      )}
+
+      {/* Bet */}
+      {status !== "playing" && (
+        <div style={{ display: "flex", gap: 6, marginBottom: 12, justifyContent: "center" }}>
+          {[10,20,50,100].map(b => (
+            <button key={b} onClick={() => setBet(b)} style={{
+              padding: "4px 12px", borderRadius: 20, fontSize: 11, cursor: "pointer",
+              background: bet === b ? "rgba(212,175,55,0.2)" : "rgba(255,255,255,0.05)",
+              border: `1px solid ${bet === b ? "rgba(212,175,55,0.5)" : "rgba(255,255,255,0.1)"}`,
+              color: bet === b ? "#d4af37" : "#666", transition: "all .2s"
+            }}>${b}</button>
+          ))}
+        </div>
+      )}
+
+      {/* Actions */}
+      <div style={{ display: "flex", gap: 8 }}>
+        {status !== "playing" ? (
+          <button onClick={deal} style={{
+            flex: 1, padding: "12px 0", borderRadius: 12, border: "none", cursor: "pointer",
+            background: "linear-gradient(135deg,#d4af37,#b8922e)",
+            color: "#000", fontWeight: 800, fontSize: 13, letterSpacing: 2,
+            boxShadow: "0 0 20px rgba(212,175,55,0.3)"
+          }}>DEAL</button>
+        ) : (
+          <>
+            <button onClick={hit} style={{
+              flex: 1, padding: "12px 0", borderRadius: 12, border: "none", cursor: "pointer",
+              background: "linear-gradient(135deg,#3b82f6,#2563eb)", color: "white",
+              fontWeight: 700, fontSize: 13, letterSpacing: 1
+            }}>HIT</button>
+            <button onClick={stand} style={{
+              flex: 1, padding: "12px 0", borderRadius: 12, border: "none", cursor: "pointer",
+              background: "linear-gradient(135deg,#ef4444,#dc2626)", color: "white",
+              fontWeight: 700, fontSize: 13, letterSpacing: 1
+            }}>STAND</button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Stats Ticker ────────────────────────────────────────────────────
+function LiveTicker() {
+  const [items, setItems] = useState([
+    "🏆 Alex W. won $4,820 on Diamond Slots",
+    "🎲 Player_99 hit Blackjack!",
+    "💰 Jackpot at $48,320 and climbing",
+    "⭐ VIP table now open — min bet $500",
+    "🔔 Sarah K. won $12,000 on Roulette Red",
+  ]);
+  const [idx, setIdx] = useState(0);
+  useEffect(() => { const t = setInterval(() => setIdx(i => (i+1) % items.length), 3000); return () => clearInterval(t); }, [items.length]);
+  return (
+    <div style={{
+      background: "rgba(212,175,55,0.08)", border: "1px solid rgba(212,175,55,0.2)",
+      borderRadius: 10, padding: "8px 16px", display: "flex", alignItems: "center", gap: 12,
+      overflow: "hidden"
+    }}>
+      <div style={{ color: "#d4af37", fontSize: 10, letterSpacing: 2, whiteSpace: "nowrap", flexShrink: 0 }}>LIVE</div>
+      <div style={{ color: "#e2d9f3", fontSize: 12, animation: "fadeIn .5s ease" }} key={idx}>{items[idx]}</div>
+    </div>
+  );
+}
+
+// ── Background Canvas ───────────────────────────────────────────────
+function CasinoBackground() {
+  const canvasRef = useRef(null);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext("2d");
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    const particles = Array.from({length: 60}, () => ({
+      x: Math.random() * canvas.width, y: Math.random() * canvas.height,
+      vx: (Math.random()-0.5)*0.3, vy: (Math.random()-0.5)*0.3,
+      r: Math.random()*2+0.5,
+      color: Math.random() > 0.5 ? "rgba(212,175,55," : "rgba(120,40,200,"
+    }));
+    let raf;
+    const draw = () => {
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      particles.forEach(p => {
+        p.x += p.vx; p.y += p.vy;
+        if (p.x<0) p.x=canvas.width; if (p.x>canvas.width) p.x=0;
+        if (p.y<0) p.y=canvas.height; if (p.y>canvas.height) p.y=0;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI*2);
+        ctx.fillStyle = p.color + (Math.random()*0.3+0.3)+")";
+        ctx.fill();
       });
-    });
+      // Grid lines
+      ctx.strokeStyle = "rgba(212,175,55,0.03)";
+      ctx.lineWidth = 1;
+      for (let x = 0; x < canvas.width; x += 60) {
+        ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,canvas.height); ctx.stroke();
+      }
+      for (let y = 0; y < canvas.height; y += 60) {
+        ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(canvas.width,y); ctx.stroke();
+      }
+      raf = requestAnimationFrame(draw);
+    };
+    draw();
+    const resize = () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; };
+    window.addEventListener("resize", resize);
+    return () => { cancelAnimationFrame(raf); window.removeEventListener("resize", resize); };
+  }, []);
+  return <canvas ref={canvasRef} style={{ position: "fixed", top:0, left:0, width:"100%", height:"100%", zIndex:0, pointerEvents:"none" }}/>;
+}
 
-    // Live traffic update
-    setInterval(() => {
-      const flights = Math.floor(Math.random() * 200 + 1800);
-      const capacity = Math.floor(Math.random() * 20 + 60);
-      activeFlights.textContent = flights.toLocaleString() + ' vols actifs';
-      capacityPct.textContent = capacity + '% capacit&eacute;';
-      gsap.to(trafficBar, { width: capacity + '%', duration: 1.5, ease: 'power2.out' });
-    }, 4000);
-  }
+// ── Main App ────────────────────────────────────────────────────────
+export default function CasinoApp() {
+  const [tab, setTab] = useState("slots");
+  const [totalWon, setTotalWon] = useState(0);
+  const [jackpot, setJackpot] = useState(48320);
+  const [shake, setShake] = useState(false);
 
-})();
-</script>
-</body>
-</html>
+  useEffect(() => { const t = setInterval(() => setJackpot(j => j + Math.floor(Math.random()*7+1)), 1800); return () => clearInterval(t); }, []);
+
+  const handleWin = (amount) => {
+    setTotalWon(w => w + amount);
+    if (amount >= 100) { setShake(true); setTimeout(() => setShake(false), 800); }
+  };
+
+  const tabs = [
+    { id: "slots", label: "🎰 Slots" },
+    { id: "roulette", label: "🎲 Roulette" },
+    { id: "blackjack", label: "♠ Blackjack" },
+  ];
+
+  return (
+    <div style={{
+      minHeight: "100vh", background: "radial-gradient(ellipse at 50% 0%, rgba(80,20,120,0.4) 0%, rgba(10,5,20,1) 60%)",
+      fontFamily: "'Georgia', serif",
+      animation: shake ? "shake 0.5s ease" : "none",
+      position: "relative", overflow: "hidden"
+    }}>
+      <style>{`
+        @keyframes shimmer { 0%{background-position:0% 50%} 100%{background-position:200% 50%} }
+        @keyframes fadeIn { from{opacity:0;transform:translateY(4px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes shake { 0%,100%{transform:translateX(0)} 20%{transform:translateX(-8px)} 40%{transform:translateX(8px)} 60%{transform:translateX(-6px)} 80%{transform:translateX(6px)} }
+        @keyframes bounce { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)} }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+        * { box-sizing: border-box; }
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: rgba(255,255,255,0.02); }
+        ::-webkit-scrollbar-thumb { background: rgba(212,175,55,0.3); border-radius: 4px; }
+      `}</style>
+
+```
+  <CasinoBackground />
+
+  <div style={{ position: "relative", zIndex: 1, maxWidth: 900, margin: "0 auto", padding: "0 16px 120px" }}>
+
+    {/* Header */}
+    <div style={{ textAlign: "center", padding: "36px 0 24px" }}>
+      <div style={{
+        fontSize: 11, letterSpacing: 6, color: "#d4af37", opacity: 0.7, marginBottom: 8,
+        textTransform: "uppercase"
+      }}>Welcome to</div>
+      <h1 style={{
+        margin: 0, fontSize: "clamp(36px,8vw,72px)", fontWeight: 900, letterSpacing: 4,
+        background: "linear-gradient(135deg,#d4af37 0%,#fff8dc 40%,#d4af37 60%,#b8922e 100%)",
+        WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
+        backgroundSize: "300% 300%", animation: "shimmer 3s linear infinite",
+        textShadow: "none", filter: "drop-shadow(0 0 30px rgba(212,175,55,0.4))"
+      }}>ABYSS CASINO</h1>
+      <div style={{ color: "rgba(212,175,55,0.5)", fontSize: 12, letterSpacing: 8, marginTop: 4 }}>
+        EST. MMXXV • LUXURY GAMING
+      </div>
+
+      {/* Jackpot */}
+      <div style={{
+        display: "inline-flex", alignItems: "center", gap: 10, marginTop: 20,
+        padding: "10px 24px", borderRadius: 40,
+        background: "rgba(212,175,55,0.08)", border: "1px solid rgba(212,175,55,0.3)",
+        boxShadow: "0 0 30px rgba(212,175,55,0.1)"
+      }}>
+        <span style={{ color: "#888", fontSize: 10, letterSpacing: 3 }}>JACKPOT</span>
+        <span style={{
+          color: "#d4af37", fontSize: 22, fontWeight: 900, fontVariantNumeric: "tabular-nums",
+          textShadow: "0 0 20px rgba(212,175,55,0.6)"
+        }}>${jackpot.toLocaleString()}</span>
+        <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#22c55e", animation: "pulse 1s infinite" }}/>
+      </div>
+    </div>
+
+    {/* Ticker */}
+    <div style={{ marginBottom: 24 }}><LiveTicker /></div>
+
+    {/* Tabs */}
+    <div style={{
+      display: "flex", gap: 4, marginBottom: 24, padding: 4,
+      background: "rgba(255,255,255,0.04)", borderRadius: 14,
+      border: "1px solid rgba(255,255,255,0.08)"
+    }}>
+      {tabs.map(t => (
+        <button key={t.id} onClick={() => setTab(t.id)} style={{
+          flex: 1, padding: "10px 0", borderRadius: 10, border: "none", cursor: "pointer",
+          background: tab === t.id
+            ? "linear-gradient(135deg,rgba(212,175,55,0.2),rgba(120,40,200,0.2))"
+            : "transparent",
+          color: tab === t.id ? "#d4af37" : "#666",
+          fontSize: 13, fontWeight: tab === t.id ? 700 : 400,
+          borderBottom: tab === t.id ? "2px solid #d4af37" : "2px solid transparent",
+          transition: "all .2s", letterSpacing: 1
+        }}>{t.label}</button>
+      ))}
+    </div>
+
+    {/* Game panel */}
+    <div style={{ animation: "fadeIn .4s ease" }} key={tab}>
+      {tab === "slots" && <SlotMachine onWin={handleWin}/>}
+      {tab === "roulette" && <Roulette />}
+      {tab === "blackjack" && <Blackjack />}
+    </div>
+
+    {/* Stats row */}
+    {totalWon > 0 && (
+      <div style={{
+        marginTop: 20, padding: "12px 20px", borderRadius: 12, textAlign: "center",
+        background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.3)",
+        color: "#22c55e", fontSize: 14, animation: "fadeIn .4s"
+      }}>
+        🏆 Session winnings: <strong>${totalWon.toLocaleString()}</strong>
+      </div>
+    )}
+
+    {/* Footer */}
+    <div style={{ textAlign: "center", marginTop: 40, color: "rgba(255,255,255,0.15)", fontSize: 10, letterSpacing: 2 }}>
+      ABYSS CASINO • PLAY RESPONSIBLY • 18+ ONLY • NOT REAL MONEY
+    </div>
+  </div>
+
+  {/* Chat widget */}
+  <CasinoChatWidget onCommand={(cmd) => console.log("Command:", cmd)} />
+</div>
+```
+
+);
+}
